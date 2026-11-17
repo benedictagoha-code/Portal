@@ -1042,7 +1042,7 @@ function getResults(token) {
   }
   if (user.role === 'Lecturer') {
     const myCourses = new Set(getRows_(SHEETS.COURSES)
-      .filter(c => String(c.lecturerid).toUpperCase() === String(user.userID).toUpperCase())
+      .filter(c => getCourseLecturerIds_(c).indexOf(String(user.userID).trim().toUpperCase()) >= 0)
       .map(c => c.courseid));
     return { success: true, results: all.filter(r => myCourses.has(r.courseid)) };
   }
