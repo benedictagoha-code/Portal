@@ -433,11 +433,24 @@ function createCourse(token, payload) {
 }
 
 function claimCourseAsLecturer(token, courseID) {
-  const user = requireUser_(token, ['Administrator']);
+  // Lecturers may claim unassigned courses for themselves. Administrators
+  // retain the ability to assign/reassign a course through this action.
+  const user = requireUser_(token, ['Lecturer', 'Administrator']);
   const courses = getRows_(SHEETS.COURSES);
   const target = courses.find(c => String(c.courseid) === String(courseID));
   if (!target) return { success: false, message: 'Course not found.' };
-  const claimant = String(user.userID).trim().toUpperCase();
+
+  const claimant = String(user.userID || '').trim().toUpperCase();
+  const currentLecturer = String(target.lecturerid || '').trim().toUpperCase();
+
+  if (user.role === 'Lecturer' && currentLecturer && currentLecturer !== claimant) {
+    return { success: false, message: 'This course is already assigned to another lecturer. Please contact the Administrator.' };
+  }
+
+  if (currentLecturer === claimant) {
+    return { success: true, message: `You are already assigned to ${target.coursecode}.` };
+  }
+
   getDB_().getSheetByName(SHEETS.COURSES).getRange(target._row, 7).setValue(claimant);
   return { success: true, message: `You are now assigned to ${target.coursecode}.` };
 }
