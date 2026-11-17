@@ -525,6 +525,42 @@ function recordAttendance(token, payload) {
   return { success: true, message: 'Attendance saved/updated for ' + saved + ' enrolled student(s).', saved: saved };
 }
 
+
+/**
+ * Import a complete attendance sheet (CSV is parsed by the mobile frontend).
+ * Validates every matriculation number and status before writing any records.
+ * Existing course/date/student records are updated rather than duplicated.
+ */
+function bulkUploadAttendance(token, payload) {
+  const user = requireUser_(token, ['Lecturer', 'Administrator']);
+  payload = payload || {};
+  const crs = requireCourseAccess_(user, payload.courseID);
+  const date = String(payload.lectureDate || '').trim();
+  const entries = Array.isArray(payload.entries) ? payload.entries : [];
+  if (!date || !entries.length) return { success: false, message: 'Select a lecture date and provide attendance rows.' };
+
+  const enrolled = new Set(getRows_(SHEETS.ENROLMENTS)
+    .filter(e => String(e.courseid) === String(crs.courseid))
+    .map(e => normaliseMatric_(e.matricno)));
+  const invalid = [];
+  const clean = [];
+  entries.forEach((entry, i) => {
+    const matric = normaliseMatric_(entry.matricNo);
+    const status = String(entry.status || '').trim().toUpperCase();
+    if (!matric) invalid.push('Row ' + (i + 1) + ': missing matriculation number');
+    else if (!enrolled.has(matric)) invalid.push('Row ' + (i + 1) + ': ' + matric + ' is not enrolled in ' + crs.coursecode);
+    else if (['PRESENT', 'ABSENT', 'LATE'].indexOf(status) === -1) invalid.push('Row ' + (i + 1) + ': invalid status for ' + matric);
+    else clean.push({ matricNo: matric, status: status });
+  });
+  if (invalid.length) return { success: false, message: 'No attendance was imported. Correct these entries: ' + invalid.slice(0, 12).join('; ') + (invalid.length > 12 ? '; and ' + (invalid.length - 12) + ' more.' : '') };
+  return recordAttendance(token, {
+    courseID: crs.courseid,
+    lectureDate: date,
+    topic: String(payload.topic || 'Lecture'),
+    entries: clean
+  });
+}
+
 function computeCourseAttendanceStats_(courseID) {
   const crs = getRows_(SHEETS.COURSES).find(c => c.courseid === courseID) || {};
   const roster = getRows_(SHEETS.ENROLMENTS).filter(e => e.courseid === courseID);
@@ -1110,6 +1146,7 @@ function doPost(e) {
       uploadMaterial: uploadMaterial,
       getMaterials: getMaterials,
       recordAttendance: recordAttendance,
+      bulkUploadAttendance: bulkUploadAttendance,
       getCourseAttendanceSummary: getCourseAttendanceSummary,
       getAttendanceData: getAttendanceData,
       generateEligibleCandidatesPDF: generateEligibleCandidatesPDF,
