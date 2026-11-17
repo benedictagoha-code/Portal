@@ -1,7 +1,7 @@
 /**
- * psyc@UNIDEL 3.7 — Enhanced Academic & Courseware Management System
+ * psyc@UNIDEL 3.9 — Test Bank & Randomised Assessments
  * Department of Psychology, University of Delta, Agbor
- * Run setupSystem() ONCE from the editor, then Deploy -> New version.
+ * Existing installations: run upgradeSystem39() once; never rerun setupSystem().
  */
 
 const PROP_DB_ID = 'PSYC_UNIDEL_V3_DB_ID';
@@ -65,13 +65,15 @@ function setupSystem() {
     [SHEETS.ENROLMENTS]: ['EnrolmentID', 'CourseID', 'StudentID', 'MatricNo', 'StudentName', 'EnrolledAt'],
     [SHEETS.MATERIALS]: ['MaterialID', 'CourseID', 'CourseCode', 'Title', 'MaterialType', 'Description', 'FileURL', 'UploadedBy', 'UploadedAt'],
     [SHEETS.ATTENDANCE]: ['AttendanceID', 'CourseID', 'LectureDate', 'Topic', 'StudentID', 'MatricNo', 'Status', 'RecordedBy'],
-    [SHEETS.TESTS]: ['TestID', 'CourseID', 'CourseCode', 'Kind', 'Title', 'DurationMinutes', 'TotalMarks', 'MaxAttempts', 'ScoringMethod', 'FeedbackMode', 'OpenDateTime', 'CloseDateTime', 'Shuffle', 'Instructions', 'Status', 'CreatedAt', 'ComponentGroup', 'ComponentGradingMethod', 'SelectedTestID'],
-    [SHEETS.QUESTIONS]: ['QuestionID', 'TestID', 'QuestionType', 'QuestionText', 'OptionA', 'OptionB', 'OptionC', 'OptionD', 'CorrectAnswer', 'Marks'],
+    [SHEETS.TESTS]: ['TestID', 'CourseID', 'CourseCode', 'Kind', 'Title', 'DurationMinutes', 'TotalMarks', 'MaxAttempts', 'ScoringMethod', 'FeedbackMode', 'OpenDateTime', 'CloseDateTime', 'Shuffle', 'Instructions', 'Status', 'CreatedAt', 'ComponentGroup', 'ComponentGradingMethod', 'SelectedTestID', 'QuestionCount', 'ShuffleOptions'],
+    [SHEETS.QUESTIONS]: ['QuestionID', 'TestID', 'QuestionType', 'QuestionText', 'OptionA', 'OptionB', 'OptionC', 'OptionD', 'CorrectAnswer', 'Marks', 'Explanation'],
     [SHEETS.ATTEMPTS]: ['AttemptID', 'TestID', 'StudentID', 'MatricNo', 'AttemptNumber', 'Score', 'MaxScore', 'SubmittedAt'],
     [SHEETS.RESULTS]: ['ResultID', 'CourseID', 'CourseCode', 'CourseTitle', 'CreditUnits', 'StudentID', 'MatricNo', 'StudentName', 'CAScore', 'ExamScore', 'TotalScore', 'Grade', 'GradePoint', 'UpdatedAt'],
     [SHEETS.ANNOUNCEMENTS]: ['AnnouncementID', 'Title', 'Audience', 'Body', 'AuthorName', 'AuthorRole', 'DatePosted'],
     [SHEETS.DISCUSSIONS]: ['TopicID', 'CourseID', 'CourseCode', 'Title', 'Body', 'AuthorName', 'AuthorRole', 'DateCreated'],
-    [SHEETS.REPLIES]: ['ReplyID', 'TopicID', 'Body', 'AuthorName', 'AuthorRole', 'DatePosted']
+    [SHEETS.REPLIES]: ['ReplyID', 'TopicID', 'Body', 'AuthorName', 'AuthorRole', 'DatePosted'],
+    [SHEETS.TEST_BANK]: ['BankQuestionID','CourseID','OwnerID','Sharing','Topic','Difficulty','QuestionType','QuestionText','OptionA','OptionB','OptionC','OptionD','CorrectAnswer','Marks','Explanation','Status','CreatedAt','UpdatedAt'],
+    [SHEETS.TEST_SESSIONS]: ['SessionID','TestID','StudentID','QuestionIDs','OptionOrderJSON','StartedAt','ExpiresAt','Submitted']
   };
 
   Object.keys(schema).forEach(name => {
@@ -99,7 +101,7 @@ function setupSystem() {
   if (setSh.getLastRow() === 1) {
     [
       ['SystemName', 'psyc@UNIDEL'],
-      ['Version', '3.7'],
+      ['Version', '3.9'],
       ['Institution', 'University of Delta, Agbor'],
       ['Department', 'Department of Psychology'],
       ['AcademicSession', '2025/2026'],
@@ -310,14 +312,14 @@ function getPublicInfo() {
     return {
       success: true,
       systemName: map.SystemName || 'psyc@UNIDEL',
-      version: map.Version || '3.7',
+      version: map.Version || '3.9',
       institution: map.Institution || 'University of Delta, Agbor',
       department: map.Department || 'Department of Psychology',
       academicSession: map.AcademicSession || '2025/2026',
       semester: map.Semester || 'First Semester'
     };
   } catch (e) {
-    return { success: true, systemName: 'psyc@UNIDEL', version: '3.7', institution: 'University of Delta, Agbor', department: 'Department of Psychology' };
+    return { success: true, systemName: 'psyc@UNIDEL', version: '3.9', institution: 'University of Delta, Agbor', department: 'Department of Psychology' };
   }
 }
 
