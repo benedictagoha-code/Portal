@@ -23,7 +23,9 @@ const SHEETS = {
   RESULTS: 'Results',
   ANNOUNCEMENTS: 'Announcements',
   DISCUSSIONS: 'Discussions',
-  REPLIES: 'DiscussionReplies'
+  REPLIES: 'DiscussionReplies',
+  TEST_BANK: 'TestBank',
+  TEST_SESSIONS: 'TestSessions'
 };
 
 /* ============================================================
@@ -185,6 +187,24 @@ function upgradeSystem38() {
   const rows=getRows_(SHEETS.SETTINGS), v=rows.find(r=>String(r.key).trim().toLowerCase()==='version');
   if(v) settings.getRange(v._row,2).setValue('3.8'); else settings.appendRow(['Version','3.8']);
   return {success:true,version:'3.8',migratedAssignments:additions.length,message:'3.8 migration completed. Existing records were retained.'};
+}
+
+/** Non-destructive 3.9 migration: question bank and resumable randomised attempts. */
+function upgradeSystem39() {
+  const ss = getDB_(), settings = ss.getSheetByName(SHEETS.SETTINGS), tests = ss.getSheetByName(SHEETS.TESTS);
+  if (!settings || !tests || !ss.getSheetByName(SHEETS.QUESTIONS)) throw new Error('Required assessment sheets are missing. No migration was performed.');
+  const bankHeaders = ['BankQuestionID','CourseID','OwnerID','Sharing','Topic','Difficulty','QuestionType','QuestionText','OptionA','OptionB','OptionC','OptionD','CorrectAnswer','Marks','Explanation','Status','CreatedAt','UpdatedAt'];
+  let bank = ss.getSheetByName(SHEETS.TEST_BANK);
+  if (!bank) { bank = ss.insertSheet(SHEETS.TEST_BANK); bank.appendRow(bankHeaders); bank.getRange(1,1,1,bankHeaders.length).setFontWeight('bold'); }
+  const sessionHeaders = ['SessionID','TestID','StudentID','QuestionIDs','OptionOrderJSON','StartedAt','ExpiresAt','Submitted'];
+  let sessions = ss.getSheetByName(SHEETS.TEST_SESSIONS);
+  if (!sessions) { sessions = ss.insertSheet(SHEETS.TEST_SESSIONS); sessions.appendRow(sessionHeaders); sessions.getRange(1,1,1,sessionHeaders.length).setFontWeight('bold'); }
+  const lastCol = Math.max(1, tests.getLastColumn()), headers = tests.getRange(1,1,1,lastCol).getValues()[0].map(v=>String(v).trim());
+  const missing = ['QuestionCount','ShuffleOptions'].filter(h=>headers.indexOf(h)<0);
+  if (missing.length) tests.getRange(1,lastCol+1,1,missing.length).setValues([missing]).setFontWeight('bold');
+  const rows = getRows_(SHEETS.SETTINGS), version = rows.find(r=>String(r.key).trim().toLowerCase()==='version');
+  if (version) settings.getRange(version._row,2).setValue('3.9'); else settings.appendRow(['Version','3.9']);
+  return {success:true,version:'3.9',addedTestColumns:missing,message:'3.9 upgrade completed. Existing records were retained.'};
 }
 
 /* ============================================================
@@ -757,13 +777,15 @@ function createTest(token, payload) {
     Number(payload.durationMinutes || 30), Number(payload.totalMarks || 30),
     Number(payload.maxAttempts != null ? payload.maxAttempts : 1),
     payload.scoringMethod || 'HIGHEST', payload.feedbackMode || 'SCORE_AND_ANSWERS',
-    payload.openDateTime || '', payload.closeDateTime || '', payload.shuffle || 'YES',
+    payload.openDateTime || '', payload.closeDateTime || '', payload.shuffleQuestions === 'YES' ? 'YES' : (payload.shuffle || 'NO'),
     payload.instructions || '', 'OPEN', new Date().toISOString()
   ]);
   const newRow = testSheet.getLastRow();
   setCellByHeader_(SHEETS.TESTS, newRow, 'ComponentGroup', String(payload.componentGroup || '').trim());
   setCellByHeader_(SHEETS.TESTS, newRow, 'ComponentGradingMethod', payload.componentGradingMethod || 'AVERAGE');
   setCellByHeader_(SHEETS.TESTS, newRow, 'SelectedTestID', payload.selectedTestID || '');
+  setCellByHeader_(SHEETS.TESTS, newRow, 'QuestionCount', Math.max(0, Number(payload.questionCount || 0)));
+  setCellByHeader_(SHEETS.TESTS, newRow, 'ShuffleOptions', payload.shuffleOptions === 'YES' ? 'YES' : 'NO');
   return { success: true, message: 'Quiz / CBT Examination created and scheduled.' };
 }
 
@@ -783,6 +805,9 @@ function updateTestSettings(token, testID, payload) {
   if (payload.componentGroup !== undefined) setCellByHeader_(SHEETS.TESTS, t._row, 'ComponentGroup', String(payload.componentGroup || '').trim());
   if (payload.componentGradingMethod !== undefined) setCellByHeader_(SHEETS.TESTS, t._row, 'ComponentGradingMethod', payload.componentGradingMethod);
   if (payload.selectedTestID !== undefined) setCellByHeader_(SHEETS.TESTS, t._row, 'SelectedTestID', payload.selectedTestID);
+  if (payload.shuffleQuestions !== undefined) setCellByHeader_(SHEETS.TESTS, t._row, 'Shuffle', payload.shuffleQuestions === 'YES' ? 'YES' : 'NO');
+  if (payload.shuffleOptions !== undefined) setCellByHeader_(SHEETS.TESTS, t._row, 'ShuffleOptions', payload.shuffleOptions === 'YES' ? 'YES' : 'NO');
+  if (payload.questionCount !== undefined) setCellByHeader_(SHEETS.TESTS, t._row, 'QuestionCount', Math.max(0, Number(payload.questionCount || 0)));
 
   return { success: true, message: 'Test policy, schedule, feedback, and component grading settings updated.' };
 }
@@ -802,6 +827,51 @@ function addQuestion(token, payload) {
   return { success: true, message: 'Question saved.' };
 }
 
+function saveBankQuestion(token, payload) {
+  const user = requireUser_(token, ['Lecturer','Administrator']);
+  payload = payload || {};
+  const course = requireCourseAccess_(user, payload.courseID);
+  if (!String(payload.questionText || '').trim()) return {success:false,message:'Question text is required.'};
+  const type = String(payload.questionType || 'MCQ').toUpperCase();
+  if (['MCQ','TRUE_FALSE','FILL_GAP'].indexOf(type)<0) return {success:false,message:'Unsupported question type.'};
+  const id = makeId_('BANK'), now = new Date().toISOString();
+  getDB_().getSheetByName(SHEETS.TEST_BANK).appendRow([
+    id,course.courseid,user.userID,String(payload.sharing||'PRIVATE').toUpperCase()==='SHARED'?'SHARED':'PRIVATE',
+    String(payload.topic||'').trim(),String(payload.difficulty||'MEDIUM').toUpperCase(),type,String(payload.questionText).trim(),
+    payload.optionA||'',payload.optionB||'',payload.optionC||'',payload.optionD||'',String(payload.correctAnswer||'').trim(),
+    Math.max(0,Number(payload.marks||1)),String(payload.explanation||'').trim(),'ACTIVE',now,now
+  ]);
+  return {success:true,questionID:id,message:'Question saved to the Test Bank.'};
+}
+function listBankQuestions(token, courseID) {
+  const user = requireUser_(token,['Lecturer','Administrator']);
+  requireCourseAccess_(user,courseID);
+  const rows = getRows_(SHEETS.TEST_BANK).filter(q=>String(q.courseid)===String(courseID) && String(q.status||'ACTIVE').toUpperCase()==='ACTIVE' &&
+    (user.role==='Administrator' || String(q.ownerid).toUpperCase()===String(user.userID).toUpperCase() || String(q.sharing).toUpperCase()==='SHARED'));
+  return {success:true,questions:rows};
+}
+function addBankQuestionsToTest(token, testID, bankQuestionIDs) {
+  const user = requireUser_(token,['Lecturer','Administrator']);
+  const test = getRows_(SHEETS.TESTS).find(t=>String(t.testid)===String(testID));
+  if (!test) return {success:false,message:'Test not found.'};
+  requireCourseAccess_(user,test.courseid);
+  const ids = Array.isArray(bankQuestionIDs) ? bankQuestionIDs.map(String) : [String(bankQuestionIDs||'')];
+  const bank = getRows_(SHEETS.TEST_BANK), sh = getDB_().getSheetByName(SHEETS.QUESTIONS);
+  let added=0;
+  ids.forEach(id=>{
+    const q=bank.find(x=>String(x.bankquestionid)===id && String(x.courseid)===String(test.courseid) &&
+      (user.role==='Administrator' || String(x.ownerid).toUpperCase()===String(user.userID).toUpperCase() || String(x.sharing).toUpperCase()==='SHARED'));
+    if(!q) return;
+    sh.appendRow([makeId_('QST'),testID,q.questiontype,q.questiontext,q.optiona,q.optionb,q.optionc,q.optiond,q.correctanswer,Number(q.marks||1)]);
+    added++;
+  });
+  return {success:true,added:added,message:added+' question(s) added to the assessment.'};
+}
+function shuffleArray_(items) {
+  const a=items.slice();
+  for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));const t=a[i];a[i]=a[j];a[j]=t;}
+  return a;
+}
 function getTestWindowState_(t) {
   const now = Date.now();
   const openMs = t.opendatetime ? new Date(t.opendatetime).getTime() : NaN;
@@ -899,51 +969,55 @@ function getTestsAndAttempts(token) {
 }
 
 function getQuestionsForTest(token, testID) {
-  const user = requireUser_(token);
-  const test = getRows_(SHEETS.TESTS).find(t => t.testid === testID);
+  const user = requireUser_(token), test = getRows_(SHEETS.TESTS).find(t => String(t.testid) === String(testID));
   if (!test) return { success: false, message: 'Test not found.' };
-
+  let session = null, optionMap = {};
   if (user.role === 'Student') {
     if (!isStudentEnrolled_(user.userID, test.courseid)) return { success: false, message: 'You are not enrolled in this course.' };
     if (String(test.status || 'OPEN').toUpperCase() !== 'OPEN') return { success: false, message: 'This test is not available.' };
     const win = getTestWindowState_(test);
-    if (!win.isOpen) {
-      return {
-        success: false,
-        message: win.statusLabel === 'UPCOMING'
-          ? `This test opens at ${new Date(test.opendatetime).toLocaleString()}.`
-          : 'This test window has already closed.'
-      };
-    }
-    const matric = String(user.userID).toUpperCase();
-    const prev = getRows_(SHEETS.ATTEMPTS).filter(a => a.testid === testID && String(a.matricno).toUpperCase() === matric);
+    if (!win.isOpen) return { success: false, message: win.statusLabel === 'UPCOMING' ? 'This test has not opened yet.' : 'This test window has already closed.' };
+    const matric = normaliseMatric_(user.userID);
+    const prev = getRows_(SHEETS.ATTEMPTS).filter(a => String(a.testid) === String(testID) && normaliseMatric_(a.matricno) === matric);
     const maxAtt = Number(test.maxattempts != null ? test.maxattempts : 1);
-    if (maxAtt > 0 && prev.length >= maxAtt) {
-      return { success: false, message: `You have used all ${maxAtt} allowed attempt(s).` };
+    if (maxAtt > 0 && prev.length >= maxAtt) return { success: false, message: 'You have used all ' + maxAtt + ' allowed attempt(s).' };
+    const active = getRows_(SHEETS.TEST_SESSIONS).filter(s=>String(s.testid)===String(testID)&&normaliseMatric_(s.studentid)===matric&&String(s.submitted).toUpperCase()!=='YES'&&new Date(s.expiresat).getTime()>Date.now());
+    if (active.length) session=active[active.length-1];
+  } else if (user.role === 'Lecturer') requireCourseAccess_(user, test.courseid);
+  else if (user.role !== 'Administrator') return { success:false,message:'Access denied.' };
+  const all = getRows_(SHEETS.QUESTIONS).filter(q => String(q.testid) === String(testID));
+  if (!all.length) return { success:false,message:'No questions have been added to this assessment.' };
+  let qs;
+  if (user.role==='Student') {
+    if (session) {
+      let ids=[]; try{ids=JSON.parse(String(session.questionids||'[]'));}catch(e){}
+      try{optionMap=JSON.parse(String(session.optionorderjson||'{}'))||{};}catch(e){}
+      const map=new Map(all.map(q=>[String(q.questionid),q]));
+      qs=ids.map(id=>map.get(String(id))).filter(Boolean);
+    } else {
+      qs=all.slice();
+      if(String(test.shuffle||'NO').toUpperCase()==='YES') qs=shuffleArray_(qs);
+      const count=Math.max(0,Number(test.questioncount||0));
+      if(count>0&&count<qs.length) qs=qs.slice(0,count);
+      if(String(test.shuffleoptions||'NO').toUpperCase()==='YES') {
+        qs.forEach(q=>{
+          if(String(q.questiontype).toUpperCase()==='MCQ'){
+            const opts=['A','B','C','D'].filter(k=>String(q['option'+k]||'').trim());
+            optionMap[String(q.questionid)]=shuffleArray_(opts);
+          }
+        });
+      }
+      const now=new Date(), expiry=new Date(now.getTime()+(Math.max(5,Number(test.durationminutes||30))+10)*60000);
+      getDB_().getSheetByName(SHEETS.TEST_SESSIONS).appendRow([makeId_('SES'),testID,normaliseMatric_(user.userID),JSON.stringify(qs.map(q=>q.questionid)),JSON.stringify(optionMap),now.toISOString(),expiry.toISOString(),'NO']);
     }
-  } else if (user.role === 'Lecturer') {
-    requireCourseAccess_(user, test.courseid);
-  } else if (user.role !== 'Administrator') {
-    return { success: false, message: 'Access denied.' };
-  }
-
-  let qs = getRows_(SHEETS.QUESTIONS).filter(q => q.testid === testID).map(q => ({
-    questionID: q.questionid,
-    questionType: q.questiontype,
-    questionText: q.questiontext,
-    optionA: q.optiona,
-    optionB: q.optionb,
-    optionC: q.optionc,
-    optionD: q.optiond,
-    marks: q.marks
-  }));
-
-  if (String(test.shuffle).toUpperCase() === 'YES' && user.role === 'Student') {
-    qs = qs.sort(() => Math.random() - 0.5);
-  }
-  return { success: true, test: test, questions: qs };
+  } else qs=all;
+  const out=qs.map(q=>{
+    const obj={questionID:q.questionid,questionType:q.questiontype,questionText:q.questiontext,optionA:q.optiona,optionB:q.optionb,optionC:q.optionc,optionD:q.optiond,marks:q.marks};
+    if(user.role==='Student'&&optionMap[String(q.questionid)]) obj.optionOrder=optionMap[String(q.questionid)].map(k=>({key:k.toLowerCase(),label:q['option'+k]}));
+    return obj;
+  });
+  return {success:true,test:test,questions:out};
 }
-
 function submitCBTAttempt(token, testID, answers) {
   const user = requireUser_(token, ['Student']);
   const lock = LockService.getScriptLock();
@@ -961,7 +1035,11 @@ function submitCBTAttempt(token, testID, answers) {
     const maxAtt = Number(test.maxattempts != null ? test.maxattempts : 1);
     if (maxAtt > 0 && prevAttempts.length >= maxAtt) return { success: false, message: 'Maximum allowed attempts (' + maxAtt + ') reached.' };
 
-    const qs = getRows_(SHEETS.QUESTIONS).filter(q => String(q.testid) === String(testID));
+    const allQuestions = getRows_(SHEETS.QUESTIONS).filter(q => String(q.testid) === String(testID));
+    const activeSession = getRows_(SHEETS.TEST_SESSIONS).filter(s=>String(s.testid)===String(testID)&&normaliseMatric_(s.studentid)===matric&&String(s.submitted).toUpperCase()!=='YES').slice(-1)[0];
+    let selectedIds=[]; if(activeSession){try{selectedIds=JSON.parse(String(activeSession.questionids||'[]'));}catch(e){}}
+    const questionMap=new Map(allQuestions.map(q=>[String(q.questionid),q]));
+    const qs=selectedIds.length?selectedIds.map(id=>questionMap.get(String(id))).filter(Boolean):allQuestions;
     if (!qs.length) return { success: false, message: 'This test has no questions yet.' };
     let rawScore = 0, rawMax = 0;
     const reviewItems = [];
@@ -983,6 +1061,7 @@ function submitCBTAttempt(token, testID, answers) {
       makeId_('ATT'), testID, user.userID, matric, attNum, scaledScore, maxScore, new Date().toISOString()
     ]);
 
+    if(activeSession) setCellByHeader_(SHEETS.TEST_SESSIONS,activeSession._row,'Submitted','YES');
     const fbMode = String(test.feedbackmode || 'SCORE_AND_ANSWERS').toUpperCase();
     if (fbMode === 'HIDDEN') return { success: true, feedbackMode: 'HIDDEN', message: `Attempt #${attNum} submitted! Your lecturer has set scores to be released later.` };
     return {
