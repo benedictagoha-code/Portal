@@ -384,6 +384,9 @@
                 <div class="form-group"><label>Title *</label><input type="text" id="tTitle" required></div>
                 <div class="form-group"><label>Duration (Minutes) *</label><input type="number" id="tDur" value="30" min="5" max="180" required></div>
                 <div class="form-group"><label>Open Date &amp; Time</label><input type="datetime-local" id="tOpen"></div>
+                <div class="form-group"><label>Randomise Question Order?</label><select id="tShuffleQuestions"><option value="NO">No — keep the same order</option><option value="YES">Yes — random order per student</option></select></div>
+                <div class="form-group"><label>Randomise MCQ Options?</label><select id="tShuffleOptions"><option value="NO">No — keep option order</option><option value="YES">Yes — shuffle options</option></select></div>
+                <div class="form-group"><label>Questions to Draw (0 = all)</label><input type="number" id="tQuestionCount" value="0" min="0"></div>
                 <div class="form-group"><label>Close Date &amp; Time</label><input type="datetime-local" id="tClose"></div>
                 <div class="form-group"><label>Total Marks *</label><input type="number" id="tMarks" value="30" min="5" max="100" required></div>
                 <div class="form-group">
@@ -490,6 +493,31 @@
                 <div class="full"><button type="submit" class="btn btn-primary">Save Question</button></div>
               </form>
             </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Question Test Bank</div>
+            <p class="text-muted">Save questions for reuse. Private questions are visible only to their owner; shared questions are available to lecturers assigned to the course.</p>
+            <form onsubmit="onSaveBankQuestion(event)" class="form-grid">
+              <div class="form-group"><label>Course *</label><select id="bankCourse" required onchange="loadBankQuestions()"></select></div>
+              <div class="form-group"><label>Question Type</label><select id="bankType"><option value="MCQ">Multiple Choice</option><option value="TRUE_FALSE">True / False</option><option value="FILL_GAP">Fill-in-the-Gap</option></select></div>
+              <div class="form-group"><label>Topic</label><input id="bankTopic" placeholder="e.g. Memory"></div>
+              <div class="form-group"><label>Difficulty</label><select id="bankDifficulty"><option value="EASY">Easy</option><option value="MEDIUM" selected>Medium</option><option value="HARD">Hard</option></select></div>
+              <div class="form-group"><label>Access</label><select id="bankSharing"><option value="PRIVATE">Private — only me</option><option value="SHARED">Shared with assigned course lecturers</option></select></div>
+              <div class="form-group"><label>Marks</label><input id="bankMarks" type="number" min="1" value="1"></div>
+              <div class="form-group full"><label>Question *</label><textarea id="bankText" rows="2" required></textarea></div>
+              <div class="form-group"><label>Option A</label><input id="bankA"></div><div class="form-group"><label>Option B</label><input id="bankB"></div>
+              <div class="form-group"><label>Option C</label><input id="bankC"></div><div class="form-group"><label>Option D</label><input id="bankD"></div>
+              <div class="form-group"><label>Correct answer (a/b/c/d, TRUE/FALSE, or accepted text)</label><input id="bankAnswer" required></div>
+              <div class="form-group"><label>Explanation / Marking note</label><input id="bankExplanation"></div>
+              <div class="full"><button type="submit" class="btn btn-primary">Save to Test Bank</button></div>
+            </form>
+            <div class="form-grid mt-2">
+              <div class="form-group"><label>Assessment to receive selected question</label><select id="bankTargetTest"></select></div>
+              <div class="form-group"><label>Saved questions</label><select id="bankQuestionSelect"></select></div>
+              <div class="full"><button type="button" class="btn btn-primary" onclick="onAddBankQuestionToTest()">Add Selected Question to Assessment</button></div>
+            </div>
+            <div class="table-wrap" id="bankQuestionsBox"><p class="text-muted">Select a course to view its available test-bank questions.</p></div>
           </div>
 
           <div class="card">
@@ -1005,6 +1033,9 @@
           ).join('');
           document.getElementById('qTest').innerHTML = testOpts;
           document.getElementById('pTest').innerHTML = testOpts;
+          const bankTarget = document.getElementById('bankTargetTest'); if (bankTarget) bankTarget.innerHTML = testOpts;
+          const bankCourse = document.getElementById('bankCourse'); if (bankCourse) { const keep = bankCourse.value; bankCourse.innerHTML = opts; if (keep) bankCourse.value = keep; }
+          if (document.getElementById('bankCourse') && document.getElementById('bankCourse').value) await loadBankQuestions();
 
           document.getElementById('testsBox').innerHTML = tests.length
             ? `<table><thead><tr><th>Course</th><th>Title</th><th>Schedule Window</th><th>Attempts</th><th>Scoring Mode</th><th>Feedback</th><th>Action</th></tr></thead><tbody>${
@@ -1365,7 +1396,10 @@
           feedbackMode: document.getElementById('tFeedback').value,
           componentGroup: document.getElementById('tComponentGroup').value,
           componentGradingMethod: document.getElementById('tComponentMode').value,
-          selectedTestID: document.getElementById('tSelectedTest').value
+          selectedTestID: document.getElementById('tSelectedTest').value,
+          shuffleQuestions: document.getElementById('tShuffleQuestions').value,
+          shuffleOptions: document.getElementById('tShuffleOptions').value,
+          questionCount: document.getElementById('tQuestionCount').value
         });
         alertMsg('appAlert', res.message, res.success ? 'success' : 'error');
         if (res.success) { e.target.reset(); await refreshView(); }
@@ -1431,6 +1465,33 @@
       } finally { loading(false); }
     }
 
+    async function loadBankQuestions() {
+      const courseID = document.getElementById('bankCourse').value, select = document.getElementById('bankQuestionSelect'), box = document.getElementById('bankQuestionsBox');
+      if (!courseID) { select.innerHTML = '<option value="">-- Select Course First --</option>'; box.innerHTML = ''; return; }
+      try {
+        const res = await api('listBankQuestions', token, courseID), qs = res.questions || [];
+        select.innerHTML = '<option value="">-- Select Saved Question --</option>' + qs.map(q => '<option value="'+esc(q.bankquestionid)+'">'+esc(q.topic || q.questiontext).slice(0,90)+' ['+esc(q.difficulty)+']</option>').join('');
+        box.innerHTML = qs.length ? '<table><thead><tr><th>Topic</th><th>Question</th><th>Type</th><th>Access</th><th>Owner</th></tr></thead><tbody>' + qs.map(q=>'<tr><td>'+esc(q.topic||'-')+'</td><td>'+esc(q.questiontext)+'</td><td>'+esc(q.questiontype)+'</td><td>'+esc(q.sharing)+'</td><td>'+esc(q.ownerid)+'</td></tr>').join('') + '</tbody></table>' : '<p class="text-muted">No saved questions for this course yet.</p>';
+      } catch(err) { box.innerHTML = '<p class="text-muted">'+esc(err.message)+'</p>'; }
+    }
+    async function onSaveBankQuestion(e) {
+      e.preventDefault();
+      const payload={courseID:document.getElementById('bankCourse').value,questionType:document.getElementById('bankType').value,
+        topic:document.getElementById('bankTopic').value,difficulty:document.getElementById('bankDifficulty').value,
+        sharing:document.getElementById('bankSharing').value,questionText:document.getElementById('bankText').value,
+        optionA:document.getElementById('bankA').value,optionB:document.getElementById('bankB').value,optionC:document.getElementById('bankC').value,optionD:document.getElementById('bankD').value,
+        correctAnswer:document.getElementById('bankAnswer').value,marks:document.getElementById('bankMarks').value,explanation:document.getElementById('bankExplanation').value};
+      loading(true,'Saving to Test Bank...');
+      try { const res=await api('saveBankQuestion',token,payload); alertMsg('appAlert',res.message,res.success?'success':'error'); if(res.success){e.target.reset();await loadBankQuestions();} }
+      catch(err){alertMsg('appAlert',err.message,'error');} finally{loading(false);}
+    }
+    async function onAddBankQuestionToTest() {
+      const testID=document.getElementById('bankTargetTest').value, questionID=document.getElementById('bankQuestionSelect').value;
+      if(!testID||!questionID){alertMsg('appAlert','Select both an assessment and a saved question.','error');return;}
+      loading(true,'Adding question to assessment...');
+      try { const res=await api('addBankQuestionsToTest',token,testID,[questionID]); alertMsg('appAlert',res.message,res.success?'success':'error'); }
+      catch(err){alertMsg('appAlert',err.message,'error');} finally{loading(false);}
+    }
     async function onAddQuestion(e) {
       e.preventDefault();
       const t = document.getElementById('qType').value;
@@ -1467,7 +1528,8 @@
           } else if (q.questionType === 'FILL_GAP') {
             inp = `<input type="text" id="gap_${esc(q.questionID)}" class="mt-1" placeholder="Type answer...">`;
           } else {
-            inp = ['A', 'B', 'C', 'D'].filter(o => q['option' + o]).map(o => `<label class="opt-row"><input type="radio" name="q_${esc(q.questionID)}" value="${o.toLowerCase()}"><span><strong>${o.toLowerCase()}.</strong> ${esc(q['option' + o])}</span></label>`).join('');
+            const ordered = q.optionOrder && q.optionOrder.length ? q.optionOrder : ['A','B','C','D'].filter(o=>q['option'+o]).map(o=>({key:o.toLowerCase(),label:q['option'+o]}));
+            inp = ordered.map(o => `<label class="opt-row"><input type="radio" name="q_${esc(q.questionID)}" value="${esc(o.key)}"><span>${esc(o.label)}</span></label>`).join('');
           }
           return `<div class="q-box"><strong>Q${i + 1}. ${esc(q.questionText)}</strong> (${q.marks} mk)${inp}</div>`;
         }).join('');
