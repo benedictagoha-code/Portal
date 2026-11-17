@@ -201,6 +201,8 @@ function upgradeSystem39() {
   if (!sessions) { sessions = ss.insertSheet(SHEETS.TEST_SESSIONS); sessions.appendRow(sessionHeaders); sessions.getRange(1,1,1,sessionHeaders.length).setFontWeight('bold'); }
   const lastCol = Math.max(1, tests.getLastColumn()), headers = tests.getRange(1,1,1,lastCol).getValues()[0].map(v=>String(v).trim());
   const missing = ['QuestionCount','ShuffleOptions'].filter(h=>headers.indexOf(h)<0);
+  const qsh=ss.getSheetByName(SHEETS.QUESTIONS), qlast=Math.max(1,qsh.getLastColumn()), qheaders=qsh.getRange(1,1,1,qlast).getValues()[0].map(v=>String(v).trim());
+  if(qheaders.indexOf('Explanation')<0) qsh.getRange(1,qlast+1).setValue('Explanation').setFontWeight('bold');
   if (missing.length) tests.getRange(1,lastCol+1,1,missing.length).setValues([missing]).setFontWeight('bold');
   const rows = getRows_(SHEETS.SETTINGS), version = rows.find(r=>String(r.key).trim().toLowerCase()==='version');
   if (version) settings.getRange(version._row,2).setValue('3.9'); else settings.appendRow(['Version','3.9']);
@@ -863,9 +865,29 @@ function addBankQuestionsToTest(token, testID, bankQuestionIDs) {
       (user.role==='Administrator' || String(x.ownerid).toUpperCase()===String(user.userID).toUpperCase() || String(x.sharing).toUpperCase()==='SHARED'));
     if(!q) return;
     sh.appendRow([makeId_('QST'),testID,q.questiontype,q.questiontext,q.optiona,q.optionb,q.optionc,q.optiond,q.correctanswer,Number(q.marks||1)]);
+    setCellByHeader_(SHEETS.QUESTIONS,sh.getLastRow(),'Explanation',q.explanation||'');
     added++;
   });
   return {success:true,added:added,message:added+' question(s) added to the assessment.'};
+}
+function updateBankQuestion(token, questionID, payload) {
+  const user=requireUser_(token,['Lecturer','Administrator']), rows=getRows_(SHEETS.TEST_BANK);
+  const q=rows.find(x=>String(x.bankquestionid)===String(questionID));
+  if(!q) return {success:false,message:'Saved question not found.'};
+  requireCourseAccess_(user,q.courseid);
+  if(user.role!=='Administrator'&&String(q.ownerid).toUpperCase()!==String(user.userID).toUpperCase()) return {success:false,message:'Only the owner or Administrator can edit this question.'};
+  payload=payload||{};
+  const fields={Topic:payload.topic, Difficulty:payload.difficulty, Sharing:payload.sharing, QuestionType:payload.questionType, QuestionText:payload.questionText, OptionA:payload.optionA, OptionB:payload.optionB, OptionC:payload.optionC, OptionD:payload.optionD, CorrectAnswer:payload.correctAnswer, Marks:payload.marks, Explanation:payload.explanation, UpdatedAt:new Date().toISOString()};
+  Object.keys(fields).forEach(h=>{if(fields[h]!==undefined)setCellByHeader_(SHEETS.TEST_BANK,q._row,h,fields[h]);});
+  return {success:true,message:'Test Bank question updated.'};
+}
+function archiveBankQuestion(token, questionID) {
+  const user=requireUser_(token,['Lecturer','Administrator']), q=getRows_(SHEETS.TEST_BANK).find(x=>String(x.bankquestionid)===String(questionID));
+  if(!q) return {success:false,message:'Saved question not found.'};
+  requireCourseAccess_(user,q.courseid);
+  if(user.role!=='Administrator'&&String(q.ownerid).toUpperCase()!==String(user.userID).toUpperCase()) return {success:false,message:'Only the owner or Administrator can archive this question.'};
+  setCellByHeader_(SHEETS.TEST_BANK,q._row,'Status','ARCHIVED');
+  return {success:true,message:'Question archived. Existing assessments are not affected.'};
 }
 function shuffleArray_(items) {
   const a=items.slice();
@@ -996,9 +1018,10 @@ function getQuestionsForTest(token, testID) {
       qs=ids.map(id=>map.get(String(id))).filter(Boolean);
     } else {
       qs=all.slice();
-      if(String(test.shuffle||'NO').toUpperCase()==='YES') qs=shuffleArray_(qs);
+      const randomOrder=String(test.shuffle||'NO').toUpperCase()==='YES';
       const count=Math.max(0,Number(test.questioncount||0));
-      if(count>0&&count<qs.length) qs=qs.slice(0,count);
+      if(count>0&&count<qs.length){qs=shuffleArray_(qs).slice(0,count);if(!randomOrder)qs.sort((a,b)=>all.indexOf(a)-all.indexOf(b));}
+      else if(randomOrder) qs=shuffleArray_(qs);
       if(String(test.shuffleoptions||'NO').toUpperCase()==='YES') {
         qs.forEach(q=>{
           if(String(q.questiontype).toUpperCase()==='MCQ'){
