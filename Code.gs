@@ -544,13 +544,15 @@ function bulkUploadAttendance(token, payload) {
     .map(e => normaliseMatric_(e.matricno)));
   const invalid = [];
   const clean = [];
+  const seen = new Set();
   entries.forEach((entry, i) => {
     const matric = normaliseMatric_(entry.matricNo);
     const status = String(entry.status || '').trim().toUpperCase();
     if (!matric) invalid.push('Row ' + (i + 1) + ': missing matriculation number');
+    else if (seen.has(matric)) invalid.push('Row ' + (i + 1) + ': duplicate matriculation number ' + matric);
     else if (!enrolled.has(matric)) invalid.push('Row ' + (i + 1) + ': ' + matric + ' is not enrolled in ' + crs.coursecode);
     else if (['PRESENT', 'ABSENT', 'LATE'].indexOf(status) === -1) invalid.push('Row ' + (i + 1) + ': invalid status for ' + matric);
-    else clean.push({ matricNo: matric, status: status });
+    else { seen.add(matric); clean.push({ matricNo: matric, status: status }); }
   });
   if (invalid.length) return { success: false, message: 'No attendance was imported. Correct these entries: ' + invalid.slice(0, 12).join('; ') + (invalid.length > 12 ? '; and ' + (invalid.length - 12) + ' more.' : '') };
   return recordAttendance(token, {
