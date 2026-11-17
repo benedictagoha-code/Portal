@@ -13,6 +13,7 @@ const SHEETS = {
   STUDENTS: 'Students',
   LECTURERS: 'Lecturers',
   COURSES: 'Courses',
+  COURSE_LECTURERS: 'CourseLecturers',
   ENROLMENTS: 'Enrolments',
   MATERIALS: 'Materials',
   ATTENDANCE: 'Attendance',
@@ -58,6 +59,7 @@ function setupSystem() {
     [SHEETS.STUDENTS]: ['StudentID', 'MatricNo', 'Surname', 'FirstName', 'OtherNames', 'Gender', 'Programme', 'Level', 'Email', 'Phone', 'CreatedAt'],
     [SHEETS.LECTURERS]: ['LecturerID', 'StaffID', 'Title', 'Surname', 'FirstName', 'Rank', 'Email', 'Status'],
     [SHEETS.COURSES]: ['CourseID', 'CourseCode', 'CourseTitle', 'Level', 'Semester', 'CreditUnits', 'LecturerID'],
+    [SHEETS.COURSE_LECTURERS]: ['CourseID', 'LecturerID', 'AssignedAt', 'AssignedBy'],
     [SHEETS.ENROLMENTS]: ['EnrolmentID', 'CourseID', 'StudentID', 'MatricNo', 'StudentName', 'EnrolledAt'],
     [SHEETS.MATERIALS]: ['MaterialID', 'CourseID', 'CourseCode', 'Title', 'MaterialType', 'Description', 'FileURL', 'UploadedBy', 'UploadedAt'],
     [SHEETS.ATTENDANCE]: ['AttendanceID', 'CourseID', 'LectureDate', 'Topic', 'StudentID', 'MatricNo', 'Status', 'RecordedBy'],
@@ -168,6 +170,23 @@ function upgradeSystem37() {
   return { success: true, version: '3.7', message: '3.7 upgrade completed. Existing student, attendance, assessment and result records were retained.' };
 }
 
+/** Non-destructive 3.8 migration for optional multi-lecturer course assignment. */
+function upgradeSystem38() {
+  const ss = getDB_();
+  const settings = ss.getSheetByName(SHEETS.SETTINGS);
+  if (!ss.getSheetByName(SHEETS.COURSES) || !settings) throw new Error('Courses or Settings sheet is missing.');
+  let sh = ss.getSheetByName(SHEETS.COURSE_LECTURERS);
+  if (!sh) { sh = ss.insertSheet(SHEETS.COURSE_LECTURERS); sh.appendRow(['CourseID','LecturerID','AssignedAt','AssignedBy']); sh.getRange(1,1,1,4).setFontWeight('bold'); }
+  const existing = getRows_(SHEETS.COURSE_LECTURERS);
+  const keys = new Set(existing.map(r => String(r.courseid).trim() + '|' + String(r.lecturerid).trim().toUpperCase()));
+  const additions = [];
+  getRows_(SHEETS.COURSES).forEach(c => { const cid=String(c.courseid||'').trim(), lid=String(c.lecturerid||'').trim().toUpperCase(); if(cid&&lid&&!keys.has(cid+'|'+lid)){additions.push([cid,lid,new Date().toISOString(),'SYSTEM-MIGRATION']);keys.add(cid+'|'+lid);} });
+  if (additions.length) sh.getRange(sh.getLastRow()+1,1,additions.length,4).setValues(additions);
+  const rows=getRows_(SHEETS.SETTINGS), v=rows.find(r=>String(r.key).trim().toLowerCase()==='version');
+  if(v) settings.getRange(v._row,2).setValue('3.8'); else settings.appendRow(['Version','3.8']);
+  return {success:true,version:'3.8',migratedAssignments:additions.length,message:'3.8 migration completed. Existing records were retained.'};
+}
+
 /* ============================================================
    2. CORE HELPERS & SECURITY
    ============================================================ */
@@ -223,13 +242,21 @@ function isStudentEnrolled_(matric, courseID) {
   return getRows_(SHEETS.ENROLMENTS).some(e => normaliseMatric_(e.matricno) === key && String(e.courseid) === String(courseID));
 }
 
+function getCourseLecturerIds_(course) {
+  const ids=[]; const primary=String(course && course.ecturerid || '').trim().toUpperCase();
+  if(primary) ids.push(primary);
+  getRows_(SHEETS.COURSE_LECTURERS).forEach(r=>{if(String(r.courseid)===String(course.courseid)){const id=String(r.lecturerid||'').trim().toUpperCase();if(id&&ids.indexOf(id)<0)ids.push(id);}});
+  return ids;
+}
+function getLecturerCourseIds_(lecturerID) {
+  const uid=String(lecturerID||'').trim().toUpperCase();
+  return new Set(getRows_(SHEETS.COURSES).filter(c=>getCourseLecturerIds_(c).indexOf(uid)>=0).map(c=>String(c.courseid)));
+}
 function requireCourseAccess_(user, courseID) {
-  const course = getRows_(SHEETS.COURSES).find(c => String(c.courseid) === String(courseID));
-  if (!course) throw new Error('Course not found.');
-  if (user.role === 'Administrator') return course;
-  if (user.role !== 'Lecturer' || String(course.lecturerid || '').trim().toUpperCase() !== String(user.userID || '').trim().toUpperCase()) {
-    throw new Error('Access denied. You are not assigned to this course.');
-  }
+  const course=getRows_(SHEETS.COURSES).find(c=>String(c.courseid)===String(courseID));
+  if(!course) throw new Error('Course not found.');
+  if(user.role==='Administrator') return course;
+  if(user.role!=='Lecturer'||getCourseLecturerIds_(course).indexOf(String(user.userID||'').trim().toUpperCase())<0) throw new Error('Access denied. You are not assigned to this course.');
   return course;
 }
 
@@ -397,8 +424,8 @@ function getCourses(token) {
     const uid = String(user.userID).toUpperCase();
     return {
       success: true,
-      courses: all.filter(c => String(c.lecturerid).toUpperCase() === uid),
-      allCourses: all
+      courses: all.filter(c => getCourseLecturerIds_(c).indexOf(uid) >= 0),
+      allCourses: all.map(c => Object.assign({}, c, { assignedLecturers: getCourseLecturerIds_(c) }))
     };
   }
 
@@ -412,7 +439,7 @@ function getCourses(token) {
     };
   }
 
-  return { success: true, courses: all, allCourses: all };
+  return { success: true, courses: all, allCourses: all.map(c => Object.assign({}, c, { assignedLecturers: getCourseLecturerIds_(c) })) };
 }
 
 function createCourse(token, payload) {
@@ -433,26 +460,41 @@ function createCourse(token, payload) {
 }
 
 function claimCourseAsLecturer(token, courseID) {
-  // Lecturers may claim unassigned courses for themselves. Administrators
-  // retain the ability to assign/reassign a course through this action.
-  const user = requireUser_(token, ['Lecturer', 'Administrator']);
-  const courses = getRows_(SHEETS.COURSES);
-  const target = courses.find(c => String(c.courseid) === String(courseID));
-  if (!target) return { success: false, message: 'Course not found.' };
+  const user=requireUser_(token,['Lecturer']);
+  const target=getRows_(SHEETS.COURSES).find(c=>String(c.courseid)===String(courseID));
+  if(!target) return {success:false,message:'Course not found.'};
+  const claimant=String(user.userID||'').trim().toUpperCase();
+  if(getCourseLecturerIds_(target).indexOf(claimant)>=0) return {success:true,message:'You are already assigned to '+target.coursecode+'.'};
+  const sh=getDB_().getSheetByName(SHEETS.COURSE_LECTURERS);
+  if(!sh) throw new Error('Course assignment table is missing. Ask the Administrator to run upgradeSystem38().');
+  sh.appendRow([target.courseid,claimant,new Date().toISOString(),user.userID]);
+  return {success:true,message:'You have been added to '+target.coursecode+'. Existing lecturer assignments were retained.'};
+}
 
-  const claimant = String(user.userID || '').trim().toUpperCase();
-  const currentLecturer = String(target.lecturerid || '').trim().toUpperCase();
-
-  if (user.role === 'Lecturer' && currentLecturer && currentLecturer !== claimant) {
-    return { success: false, message: 'This course is already assigned to another lecturer. Please contact the Administrator.' };
+function manageCourseLecturer(token, courseID, lecturerID, action) {
+  const admin=requireUser_(token,['Administrator']);
+  const target=getRows_(SHEETS.COURSES).find(c=>String(c.courseid)===String(courseID));
+  if(!target) return {success:false,message:'Course not found.'};
+  const lid=String(lecturerID||'').trim().toUpperCase();
+  if(!lid) return {success:false,message:'Select a lecturer.'};
+  const lecturer=getRows_(SHEETS.USERS).find(u=>String(u.userid).trim().toUpperCase()===lid&&String(u.role).toLowerCase()==='lecturer');
+  if(!lecturer) return {success:false,message:'The selected account is not a lecturer account.'};
+  const sh=getDB_().getSheetByName(SHEETS.COURSE_LECTURERS);
+  if(!sh) throw new Error('Course assignment table is missing. Run upgradeSystem38() first.');
+  const assigned=getCourseLecturerIds_(target);
+  const mapped=getRows_(SHEETS.COURSE_LECTURERS).find(r=>String(r.courseid)===String(courseID)&&String(r.lecturerid).trim().toUpperCase()===lid);
+  const primary=String(target.lecturerid||'').trim().toUpperCase();
+  if(String(action).toLowerCase()==='add'){
+    if(assigned.indexOf(lid)>=0) return {success:true,message:lecturer.name+' is already assigned.'};
+    sh.appendRow([courseID,lid,new Date().toISOString(),admin.userID]);
+    return {success:true,message:lecturer.name+' added to '+target.coursecode+'.'};
   }
-
-  if (currentLecturer === claimant) {
-    return { success: true, message: `You are already assigned to ${target.coursecode}.` };
+  if(String(action).toLowerCase()==='remove'){
+    if(primary===lid) setCellByHeader_(SHEETS.COURSES,target._row,'LecturerID','');
+    if(mapped) sh.deleteRow(mapped._row);
+    return {success:true,message:lecturer.name+' removed from '+target.coursecode+'.'};
   }
-
-  getDB_().getSheetByName(SHEETS.COURSES).getRange(target._row, 7).setValue(claimant);
-  return { success: true, message: `You are now assigned to ${target.coursecode}.` };
+  return {success:false,message:'Unknown assignment action.'};
 }
 
 function enrolStudentInCourse(token, courseID) {
@@ -516,7 +558,7 @@ function getMaterials(token) {
   }
   if (user.role === 'Lecturer') {
     const myCourses = new Set(getRows_(SHEETS.COURSES)
-      .filter(c => String(c.lecturerid).toUpperCase() === String(user.userID).toUpperCase())
+      .filter(c => getCourseLecturerIds_(c).indexOf(String(user.userID).trim().toUpperCase()) >= 0)
       .map(c => c.courseid));
     return { success: true, materials: all.filter(m => myCourses.has(m.courseid)) };
   }
@@ -1174,6 +1216,7 @@ function doPost(e) {
       getCourses: getCourses,
       createCourse: createCourse,
       claimCourseAsLecturer: claimCourseAsLecturer,
+      manageCourseLecturer: manageCourseLecturer,
       enrolStudentInCourse: enrolStudentInCourse,
       getCourseRoster: getCourseRoster,
       uploadMaterial: uploadMaterial,
