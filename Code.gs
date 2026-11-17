@@ -243,7 +243,7 @@ function isStudentEnrolled_(matric, courseID) {
 }
 
 function getCourseLecturerIds_(course) {
-  const ids=[]; const primary=String(course && course.ecturerid || '').trim().toUpperCase();
+  const ids=[]; const primary=String(course && course.lecturerid || '').trim().toUpperCase();
   if(primary) ids.push(primary);
   getRows_(SHEETS.COURSE_LECTURERS).forEach(r=>{if(String(r.courseid)===String(course.courseid)){const id=String(r.lecturerid||'').trim().toUpperCase();if(id&&ids.indexOf(id)<0)ids.push(id);}});
   return ids;
@@ -425,7 +425,8 @@ function getCourses(token) {
     return {
       success: true,
       courses: all.filter(c => getCourseLecturerIds_(c).indexOf(uid) >= 0),
-      allCourses: all.map(c => Object.assign({}, c, { assignedLecturers: getCourseLecturerIds_(c) }))
+      allCourses: all.map(c => Object.assign({}, c, { assignedLecturers: getCourseLecturerIds_(c) })),
+      lecturerOptions: getRows_(SHEETS.USERS).filter(u => String(u.role).toLowerCase() === 'lecturer').map(u => ({ userID: u.userid, name: u.name }))
     };
   }
 
@@ -439,7 +440,7 @@ function getCourses(token) {
     };
   }
 
-  return { success: true, courses: all, allCourses: all.map(c => Object.assign({}, c, { assignedLecturers: getCourseLecturerIds_(c) })) };
+  return { success: true, courses: all, allCourses: all.map(c => Object.assign({}, c, { assignedLecturers: getCourseLecturerIds_(c) })), lecturerOptions: getRows_(SHEETS.USERS).filter(u => String(u.role).toLowerCase() === 'lecturer').map(u => ({ userID: u.userid, name: u.name })) };
 }
 
 function createCourse(token, payload) {
@@ -706,7 +707,7 @@ function getAttendanceData(token, courseID) {
 
   let allowedCourseIds;
   if (user.role === 'Lecturer') {
-    allowedCourseIds = new Set(courses.filter(c => String(c.lecturerid).toUpperCase() === String(user.userID).toUpperCase()).map(c => c.courseid));
+    allowedCourseIds = new Set(courses.filter(c => getCourseLecturerIds_(c).indexOf(String(user.userID).trim().toUpperCase()) >= 0).map(c => c.courseid));
   }
   const targetCrs = all.filter(a => (!courseID || a.courseid === courseID) &&
     (user.role !== 'Lecturer' || allowedCourseIds.has(a.courseid)));
@@ -844,7 +845,7 @@ function getTestsAndAttempts(token) {
     attempts = attempts.filter(a => normaliseMatric_(a.matricno) === matric);
   } else if (user.role === 'Lecturer') {
     const myCourses = new Set(getRows_(SHEETS.COURSES)
-      .filter(c => String(c.lecturerid).toUpperCase() === String(user.userID).toUpperCase())
+      .filter(c => getCourseLecturerIds_(c).indexOf(String(user.userID).trim().toUpperCase()) >= 0)
       .map(c => c.courseid));
     tests = tests.filter(t => myCourses.has(t.courseid));
     attempts = attempts.filter(a => myCourses.has(a.courseid || (tests.find(t => t.testid === a.testid) || {}).courseid));
@@ -1052,7 +1053,7 @@ function exportResultsToExcel(token, courseID) {
   const user = requireUser_(token, ['Lecturer', 'Administrator']);
   let rows = getRows_(SHEETS.RESULTS);
   if (user.role === 'Lecturer') {
-    const myCourseIds = new Set(getRows_(SHEETS.COURSES).filter(c => String(c.lecturerid).toUpperCase() === String(user.userID).toUpperCase()).map(c => String(c.courseid)));
+    const myCourseIds = new Set(getRows_(SHEETS.COURSES).filter(c => getCourseLecturerIds_(c).indexOf(String(user.userID).trim().toUpperCase()) >= 0).map(c => String(c.courseid)));
     rows = rows.filter(r => myCourseIds.has(String(r.courseid)));
   }
   if (courseID) {
