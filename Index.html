@@ -261,7 +261,7 @@
   <!-- MAIN PORTAL SHELL -->
   <div id="appScreen" class="hidden" style="display:flex; flex-direction:column; flex:1;">
     <header class="topbar">
-      <div><strong>psyc@UNIDEL</strong><span class="badge-gold">3.7</span></div>
+      <div><strong>psyc@UNIDEL</strong><span class="badge-gold">3.8</span></div>
       <div class="flex-between">
         <span id="navUserLabel" style="font-size:0.84rem;">User</span>
         <button type="button" class="btn btn-sm" style="background:rgba(255,255,255,0.16); color:#fff;" onclick="toggleSound()" id="sndBtn">Sound: On</button>
@@ -934,12 +934,20 @@
             }</tbody></table>`;
           } else {
             const allCrs = crsRes.allCourses || myCourses;
-            document.getElementById('coursesBox').innerHTML = `<table><thead><tr><th>Code</th><th>Title</th><th>Level</th><th>Units</th><th>Assigned Lecturer</th><th>Action</th></tr></thead><tbody>${
+            const lecturerOptions = crsRes.lecturerOptions || [];
+            const lecturerName = id => {
+              const found = lecturerOptions.find(l => String(l.userID).toUpperCase() === String(id).toUpperCase());
+              return found ? found.name + ' (' + id + ')' : id;
+            };
+            document.getElementById('coursesBox').innerHTML = `<table><thead><tr><th>Code</th><th>Title</th><th>Level</th><th>Units</th><th>Assigned Lecturer(s)</th><th>Action</th></tr></thead><tbody>${
               allCrs.map(c => {
-                const isMine = String(c.lecturerid).toUpperCase() === String(user.userID).toUpperCase();
-                return `<tr><td><strong>${esc(c.coursecode)}</strong></td><td>${esc(c.coursetitle)}</td><td>${esc(c.level)}</td><td>${esc(c.creditunits)}</td><td>${esc(c.lecturerid || 'Unassigned')}</td><td>${
-                  isMine ? '<span class="badge b-green">My Course</span>' : `<button class="btn btn-outline btn-sm" onclick="onClaimCourse('${esc(c.courseid)}')">Assign to Me</button>`
-                }</td></tr>`;
+                const assigned = c.assignedLecturers || (c.lecturerid ? [c.lecturerid] : []);
+                const isMine = assigned.some(id => String(id).toUpperCase() === String(user.userID).toUpperCase());
+                const assignedText = assigned.length ? assigned.map(lecturerName).map(esc).join('<br>') : 'Unassigned';
+                const action = user.role === 'Administrator'
+                  ? `<div class="form-group" style="min-width:190px;margin:0;"><select id="lecAdd_${esc(c.courseid)}"><option value="">Add lecturer...</option>${lecturerOptions.map(l => `<option value="${esc(l.userID)}">${esc(l.name)} (${esc(l.userID)})</option>`).join('')}</select><button class="btn btn-primary btn-sm mt-1" onclick="onManageCourseLecturer('${esc(c.courseid)}','add')">Add Lecturer</button>${assigned.length ? assigned.map(id => `<button class="btn btn-outline btn-sm mt-1" onclick="onManageCourseLecturer('${esc(c.courseid)}','remove','${esc(id)}')">Remove ${esc(id)}</button>`).join('') : ''}</div>`
+                  : (isMine ? '<span class="badge b-green">My Course</span>' : `<button class="btn btn-outline btn-sm" onclick="onClaimCourse('${esc(c.courseid)}')">Assign to Me</button>`);
+                return `<tr><td><strong>${esc(c.coursecode)}</strong></td><td>${esc(c.coursetitle)}</td><td>${esc(c.level)}</td><td>${esc(c.creditunits)}</td><td>${assignedText}</td><td>${action}</td></tr>`;
               }).join('')
             }</tbody></table>`;
           }
@@ -1146,6 +1154,18 @@
         alertMsg('appAlert', res.message, res.success ? 'success' : 'error');
         if (res.success) await refreshView();
       } finally { loading(false); }
+    }
+
+    async function onManageCourseLecturer(courseID, action, lecturerID) {
+      const selected = lecturerID || (document.getElementById('lecAdd_' + courseID) || {}).value || '';
+      if (!selected) { alertMsg('appAlert', 'Select a lecturer first.', 'error'); return; }
+      loading(true, action === 'remove' ? 'Removing lecturer...' : 'Assigning lecturer...');
+      try {
+        const res = await api('manageCourseLecturer', token, courseID, selected, action);
+        alertMsg('appAlert', res.message, res.success ? 'success' : 'error');
+        if (res.success) await refreshView();
+      } catch (err) { alertMsg('appAlert', err.message || 'Assignment update failed.', 'error'); }
+      finally { loading(false); }
     }
 
     async function onEnrol(courseID) {
