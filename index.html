@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>psyc@UNIDEL 3.0 — Courseware & Academic Portal</title>
+  <title>psyc@UNIDEL 3.6 — Courseware & Academic Portal</title>
   <style>
     :root {
       --primary: #0f3d3e;
@@ -61,7 +61,7 @@
 
     /* AUTH SCREEN */
     .auth-wrap { flex: 1; display: flex; align-items: center; justify-content: center; padding: 1.5rem 1rem; }
-    .auth-card { background: var(--surface); width: 100%; max-width: 520px; border-radius: 14px; box-shadow: var(--shadow); border: 1px solid var(--border); overflow: hidden; }
+    .auth-card { background: var(--surface); width: 100%; max-width: 540px; border-radius: 14px; box-shadow: var(--shadow); border: 1px solid var(--border); overflow: hidden; }
     .auth-head { background: linear-gradient(135deg, var(--primary), #165557); color: #fff; padding: 1.5rem; text-align: center; border-bottom: 3px solid var(--accent); }
     .auth-head h1 { font-size: 1.45rem; }
     .auth-head p { font-size: 0.84rem; opacity: 0.9; margin-top: 0.2rem; }
@@ -113,7 +113,7 @@
     .badge-gold { background: var(--accent); color: #0f3d3e; font-weight: 700; font-size: 0.72rem; padding: 0.18rem 0.5rem; border-radius: 6px; margin-left: 0.4rem; }
     .shell { display: flex; flex: 1; max-width: 1380px; width: 100%; margin: 0 auto; padding: 1.25rem; gap: 1.25rem; }
     .sidebar {
-      width: 230px; flex-shrink: 0; background: var(--surface); border-radius: var(--radius);
+      width: 235px; flex-shrink: 0; background: var(--surface); border-radius: var(--radius);
       border: 1px solid var(--border); padding: 0.75rem; height: fit-content; box-shadow: var(--shadow);
     }
     .nav-btn {
@@ -139,11 +139,15 @@
     .badge { padding: 0.18rem 0.55rem; border-radius: 999px; font-size: 0.72rem; font-weight: 600; display: inline-block; }
     .b-green { background: #dcfce7; color: #166534; }
     .b-red { background: #fee2e2; color: #991b1b; }
+    .b-amber { background: #fef3c7; color: #92400e; }
     .b-slate { background: #e2e8f0; color: #334155; }
+    .b-teal { background: #ccfbf1; color: #115e59; }
+
+    .reply-item { background: #f8fafc; border-left: 3px solid var(--primary); padding: 0.6rem 0.85rem; margin-top: 0.5rem; border-radius: 0 6px 6px 0; }
 
     /* CBT MODAL */
     .modal { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.55); z-index: 500; display: flex; align-items: center; justify-content: center; padding: 1rem; }
-    .modal-box { background: #fff; border-radius: 12px; width: 100%; max-width: 680px; max-height: 90vh; overflow-y: auto; padding: 1.25rem; }
+    .modal-box { background: #fff; border-radius: 12px; width: 100%; max-width: 700px; max-height: 90vh; overflow-y: auto; padding: 1.25rem; }
     .q-box { border: 1px solid var(--border); border-radius: 8px; padding: 0.9rem; margin-bottom: 0.85rem; background: #f8fafc; }
     .opt-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.65rem; background: #fff; border: 1px solid var(--border); border-radius: 6px; margin-top: 0.4rem; cursor: pointer; }
     .opt-row input { width: auto; }
@@ -169,7 +173,7 @@
   <div id="authScreen" class="auth-wrap">
     <div class="auth-card">
       <div class="auth-head">
-        <h1 id="hdrTitle">psyc@UNIDEL 3.0</h1>
+        <h1 id="hdrTitle">psyc@UNIDEL 3.6</h1>
         <p id="hdrSub">University of Delta, Agbor &bull; Department of Psychology</p>
         <div id="hdrPill" class="pill">Courseware &amp; Academic Management</div>
       </div>
@@ -177,7 +181,7 @@
       <div class="auth-tabs">
         <button type="button" class="auth-tab active" onclick="switchAuthTab(0, 'tabLogin', this)">Sign In</button>
         <button type="button" class="auth-tab" onclick="switchAuthTab(1, 'tabStuReg', this)">Student Registration</button>
-        <button type="button" class="auth-tab" onclick="switchAuthTab(2, 'tabLecReg', this)">Lecturer Registration</button>
+        <button type="button" class="auth-tab" onclick="switchAuthTab(2, 'tabLecReg', this)">Lecturer Self-Reg</button>
         <div class="tab-bar" id="authTabBar"></div>
       </div>
 
@@ -189,7 +193,7 @@
           <form onsubmit="onLogin(event)">
             <div class="form-group">
               <label>Matriculation Number / Staff User ID *</label>
-              <input type="text" id="inUser" placeholder="e.g. DEL/24/PSY/001 or ADMIN001" required>
+              <input type="text" id="inUser" placeholder="e.g. DEL/24/PSY/001, LEC-STF01, or ADMIN001" required>
             </div>
             <div class="form-group">
               <label>Password *</label>
@@ -199,7 +203,7 @@
           </form>
         </div>
 
-        <!-- STUDENT REGISTRATION -->
+        <!-- STUDENT SELF-REGISTRATION -->
         <div id="tabStuReg" class="auth-pane hidden">
           <form onsubmit="onStudentReg(event)">
             <div class="form-grid">
@@ -231,13 +235,20 @@
           </form>
         </div>
 
-        <!-- LECTURER REGISTRATION -->
+        <!-- LECTURER SELF-REGISTRATION -->
         <div id="tabLecReg" class="auth-pane hidden">
           <form onsubmit="onLecturerReg(event)">
-            <div class="form-group"><label>Departmental Staff ID *</label><input type="text" id="lStaff" placeholder="e.g. STF01" required></div>
-            <div class="form-group"><label>Registered Email *</label><input type="email" id="lEmail" required></div>
-            <div class="form-group"><label>Create Password *</label><input type="password" id="lPass" minlength="6" required></div>
-            <button type="submit" class="btn btn-primary btn-block mt-1">Activate Lecturer Account</button>
+            <div class="form-grid">
+              <div class="form-group"><label>Staff ID *</label><input type="text" id="lStaff" placeholder="e.g. STF02" required></div>
+              <div class="form-group"><label>Title</label><input type="text" id="lTitle" value="Dr."></div>
+              <div class="form-group"><label>Surname *</label><input type="text" id="lSur" required></div>
+              <div class="form-group"><label>First Name *</label><input type="text" id="lFirst" required></div>
+              <div class="form-group"><label>Rank</label><input type="text" id="lRank" value="Lecturer I"></div>
+              <div class="form-group"><label>Official Email *</label><input type="email" id="lEmail" required></div>
+              <div class="form-group"><label>Create Password (min 6 chars) *</label><input type="password" id="lPass" minlength="6" required></div>
+              <div class="form-group"><label>Confirm Password *</label><input type="password" id="lPass2" minlength="6" required></div>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block mt-2">Complete Lecturer Self-Registration</button>
           </form>
         </div>
       </div>
@@ -247,7 +258,7 @@
   <!-- MAIN PORTAL SHELL -->
   <div id="appScreen" class="hidden" style="display:flex; flex-direction:column; flex:1;">
     <header class="topbar">
-      <div><strong>psyc@UNIDEL</strong><span class="badge-gold">3.0</span></div>
+      <div><strong>psyc@UNIDEL</strong><span class="badge-gold">3.6</span></div>
       <div class="flex-between">
         <span id="navUserLabel" style="font-size:0.84rem;">User</span>
         <button type="button" class="btn btn-sm" style="background:rgba(255,255,255,0.16); color:#fff;" onclick="toggleSound()" id="sndBtn">Sound: On</button>
@@ -269,12 +280,12 @@
           </div>
           <div id="adminMetrics" class="stats hidden"></div>
           <div class="card">
-            <div class="card-title">My Courses</div>
+            <div class="card-title">My Active Courses</div>
             <div class="table-wrap" id="dashCoursesBox"></div>
           </div>
         </section>
 
-        <!-- 2. COURSES -->
+        <!-- 2. COURSES & SELF-ENROLMENT -->
         <section id="vCourses" class="view hidden">
           <div id="adminCourseBox" class="card hidden">
             <div class="card-title">Create New Course</div>
@@ -289,12 +300,12 @@
             </form>
           </div>
           <div class="card">
-            <div class="card-title">Departmental Courses &amp; Enrolment</div>
+            <div class="card-title" id="coursesCardHeading">Courses &amp; Self-Enrolment</div>
             <div class="table-wrap" id="coursesBox"></div>
           </div>
         </section>
 
-        <!-- 3. MATERIALS -->
+        <!-- 3. COURSEWARE MATERIALS -->
         <section id="vMaterials" class="view hidden">
           <div id="staffMatBox" class="card hidden">
             <div class="card-title">Upload Courseware / Lecture Notes</div>
@@ -313,37 +324,124 @@
           </div>
         </section>
 
-        <!-- 4. ATTENDANCE -->
+        <!-- 4. ATTENDANCE TOTALS, PERCENTAGE & ELIGIBLE CANDIDATES PDF (>= 75%) -->
         <section id="vAttendance" class="view hidden">
-          <div id="staffAttBox" class="card hidden">
-            <div class="card-title">Record Lecture Attendance &amp; Eligibility PDF</div>
-            <div class="form-grid mb-2">
-              <div class="form-group"><label>Course *</label><select id="aCourse" onchange="loadAttendanceRoster()"></select></div>
-              <div class="form-group"><label>Lecture Date *</label><input type="date" id="aDate"></div>
-              <div class="form-group full"><label>Topic</label><input type="text" id="aTopic" placeholder="Lecture topic"></div>
+          <div id="staffAttBox" class="hidden">
+            <div class="card">
+              <div class="card-title">Record Lecture Attendance</div>
+              <div class="form-grid mb-2">
+                <div class="form-group"><label>Select Course *</label><select id="aCourse" onchange="loadAttendanceRoster()"></select></div>
+                <div class="form-group"><label>Lecture Date *</label><input type="date" id="aDate"></div>
+                <div class="form-group full"><label>Lecture Topic</label><input type="text" id="aTopic" placeholder="e.g. Introduction to Psychometrics"></div>
+              </div>
+              <div id="attRosterBox"></div>
             </div>
-            <div id="attRosterBox" class="mb-2"></div>
-            <button type="button" class="btn btn-outline btn-sm" onclick="onDownloadEligibilityPDF()">Download Exam Ineligible PDF (&le; 75% Attendance)</button>
+
+            <div class="card">
+              <div class="flex-between mb-2">
+                <div class="card-title" style="margin:0;">Total Attendance, Percentage &amp; Eligible Candidates (&ge; 75%)</div>
+                <div class="flex-between">
+                  <select id="aSummaryCourse" onchange="loadStaffAttendanceSummary()" style="max-width:250px;"></select>
+                  <button type="button" class="btn btn-primary btn-sm" onclick="onDownloadEligiblePDF()">Print Examination Eligibility Register (All Students)</button>
+                </div>
+              </div>
+              <div id="attSummaryMeta" class="text-muted mb-2"></div>
+              <div class="table-wrap" id="attSummaryBox">
+                <p class="text-muted">Select a course to calculate attendance and print the full examination eligibility register.</p>
+              </div>
+            </div>
           </div>
+
           <div class="card">
-            <div class="card-title">Attendance Summary &amp; Logs</div>
+            <div class="card-title">Attendance Records</div>
             <div class="table-wrap" id="attendanceBox"></div>
           </div>
         </section>
 
-        <!-- 5. CBT ASSESSMENTS & EXAMS -->
+        <!-- 5. CBT QUIZZES & EXAMINATIONS -->
         <section id="vTests" class="view hidden">
           <div id="staffTestBox" class="hidden">
             <div class="card">
-              <div class="card-title">Create Quiz / CA / CBT Examination</div>
+              <div class="card-title">Schedule Quiz / CA / CBT Examination</div>
               <form onsubmit="onCreateTest(event)" class="form-grid">
-                <div class="form-group"><label>Category</label><select id="tKind"><option value="ASSESSMENT">Quiz / CA</option><option value="EXAMINATION">CBT Examination</option></select></div>
+                <div class="form-group"><label>Category</label><select id="tKind"><option value="ASSESSMENT">Quiz / Continuous Assessment</option><option value="EXAMINATION">CBT Examination</option></select></div>
                 <div class="form-group"><label>Course *</label><select id="tCourse" required></select></div>
                 <div class="form-group"><label>Title *</label><input type="text" id="tTitle" required></div>
-                <div class="form-group"><label>Duration (Mins)</label><input type="number" id="tDur" value="30" min="5" max="180"></div>
-                <div class="form-group"><label>Total Marks</label><input type="number" id="tMarks" value="30" min="5" max="100"></div>
-                <div class="form-group"><label>Max Attempts</label><select id="tMaxAtt"><option value="1">1 Attempt</option><option value="2">2 Attempts</option><option value="0">Unlimited</option></select></div>
-                <div class="full"><button type="submit" class="btn btn-primary">Create Test</button></div>
+                <div class="form-group"><label>Duration (Minutes) *</label><input type="number" id="tDur" value="30" min="5" max="180" required></div>
+                <div class="form-group"><label>Open Date &amp; Time</label><input type="datetime-local" id="tOpen"></div>
+                <div class="form-group"><label>Close Date &amp; Time</label><input type="datetime-local" id="tClose"></div>
+                <div class="form-group"><label>Total Marks *</label><input type="number" id="tMarks" value="30" min="5" max="100" required></div>
+                <div class="form-group">
+                  <label>Number of Attempts Allowed *</label>
+                  <select id="tMaxAtt">
+                    <option value="1">1 Attempt</option>
+                    <option value="2">2 Attempts</option>
+                    <option value="3">3 Attempts</option>
+                    <option value="5">5 Attempts</option>
+                    <option value="0">Unlimited Attempts</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Score Computation Mode *</label>
+                  <select id="tScoreMode">
+                    <option value="HIGHEST">Retain Best (Highest) Score</option>
+                    <option value="AVERAGE">Average Score Across Attempts</option>
+                    <option value="FIRST">First Attempt Score</option>
+                    <option value="SECOND">Second Attempt Score</option>
+                    <option value="LAST">Last Attempt Score</option>
+                  </select>
+                </div>
+                <div class="form-group"><label>Assessment Component Group (Optional)</label><input type="text" id="tComponentGroup" placeholder="e.g. CA, Tests, Quizzes"></div>
+                <div class="form-group"><label>Grading Across Tests in This Group</label><select id="tComponentMode"><option value="AVERAGE">Average all tests in group</option><option value="SPECIFIC">Use a particular test</option></select></div>
+                <div class="form-group"><label>Selected Test ID (for particular-test grading)</label><input type="text" id="tSelectedTest" placeholder="Enter Test ID after creating tests"></div>
+                <div class="form-group">
+                  <label>Score Feedback to Student *</label>
+                  <select id="tFeedback">
+                    <option value="SCORE_AND_ANSWERS">Show Score &amp; Correct Answers Immediately</option>
+                    <option value="SCORE_ONLY">Show Score Only (Hide Correct Answers)</option>
+                    <option value="HIDDEN">Hide Score Until Released by Lecturer</option>
+                  </select>
+                </div>
+                <div class="full"><button type="submit" class="btn btn-primary">Create &amp; Schedule Test</button></div>
+              </form>
+            </div>
+
+            <div class="card">
+              <div class="card-title">Update Attempts, Scoring Mode, Feedback &amp; Schedule</div>
+              <form onsubmit="onUpdateTestPolicy(event)" class="form-grid">
+                <div class="form-group"><label>Select Test *</label><select id="pTest" required></select></div>
+                <div class="form-group">
+                  <label>Number of Attempts</label>
+                  <select id="pMaxAtt">
+                    <option value="1">1 Attempt</option><option value="2">2 Attempts</option>
+                    <option value="3">3 Attempts</option><option value="5">5 Attempts</option>
+                    <option value="0">Unlimited</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Score Computation Mode</label>
+                  <select id="pScoreMode">
+                    <option value="HIGHEST">Retain Best (Highest) Score</option>
+                    <option value="AVERAGE">Average Score</option>
+                    <option value="FIRST">First Attempt</option>
+                    <option value="SECOND">Second Attempt</option>
+                    <option value="LAST">Last Attempt</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Score Feedback Mode</label>
+                  <select id="pFeedback">
+                    <option value="SCORE_AND_ANSWERS">Show Score &amp; Answers</option>
+                    <option value="SCORE_ONLY">Show Score Only</option>
+                    <option value="HIDDEN">Hide Score</option>
+                  </select>
+                </div>
+                <div class="form-group"><label>Assessment Component Group</label><input type="text" id="pComponentGroup" placeholder="e.g. CA, Tests, Quizzes"></div>
+                <div class="form-group"><label>Grading Across Group Tests</label><select id="pComponentMode"><option value="AVERAGE">Average all tests in group</option><option value="SPECIFIC">Use a particular test</option></select></div>
+                <div class="form-group"><label>Selected Test ID (if specific)</label><input type="text" id="pSelectedTest" placeholder="Test ID"></div>
+                <div class="form-group"><label>Open Date &amp; Time (Optional)</label><input type="datetime-local" id="pOpen"></div>
+                <div class="form-group"><label>Close Date &amp; Time (Optional)</label><input type="datetime-local" id="pClose"></div>
+                <div class="full"><button type="submit" class="btn btn-outline">Apply Changes</button></div>
               </form>
             </div>
 
@@ -385,7 +483,16 @@
           </div>
 
           <div class="card">
-            <div class="card-title">Submitted CBT Attempts</div>
+            <div class="card-title">Official Computed Scores (By Lecturer's Scoring Mode)</div>
+            <div class="table-wrap" id="officialScoresBox"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Combined Scores Across Test Components</div>
+            <div class="table-wrap" id="componentScoresBox"><p class="text-muted">Group results appear when tests have been assigned to a component group.</p></div>
+          </div>
+          <div class="card">
+            <div class="card-title">Individual Attempt History</div>
             <div class="table-wrap" id="attemptsBox"></div>
           </div>
         </section>
@@ -405,13 +512,28 @@
           <div class="card">
             <div class="flex-between mb-2">
               <div class="card-title" style="margin:0;">Compiled Academic Results</div>
+              <button type="button" class="btn btn-primary btn-sm" onclick="onExportResultsExcel()">Export Results to Excel</button>
               <span id="gpaBadge" class="badge b-green hidden"></span>
             </div>
             <div class="table-wrap" id="resultsBox"></div>
           </div>
         </section>
 
-        <!-- 7. NOTICEBOARD -->
+        <!-- 7. DISCUSSION FORUM -->
+        <section id="vDiscussions" class="view hidden">
+          <div class="card">
+            <div class="card-title">Start a New Course Discussion Topic</div>
+            <form onsubmit="onCreateTopic(event)" class="form-grid">
+              <div class="form-group"><label>Course</label><select id="dCourse"></select></div>
+              <div class="form-group"><label>Topic Headline *</label><input type="text" id="dTitle" placeholder="e.g. Clarification on Freud's Defense Mechanisms" required></div>
+              <div class="form-group full"><label>Discussion Prompt / Question *</label><textarea id="dBody" rows="2" required></textarea></div>
+              <div class="full"><button type="submit" class="btn btn-primary">Post Discussion Topic</button></div>
+            </form>
+          </div>
+          <div id="discussionsBox"></div>
+        </section>
+
+        <!-- 8. NOTICEBOARD -->
         <section id="vNotices" class="view hidden">
           <div id="staffNoticeBox" class="card hidden">
             <div class="card-title">Post Departmental Notice</div>
@@ -424,20 +546,8 @@
           <div id="noticesBox"></div>
         </section>
 
-        <!-- 8. ADMIN GOVERNANCE -->
+        <!-- 9. ADMIN GOVERNANCE -->
         <section id="vAdmin" class="view hidden">
-          <div class="card">
-            <div class="card-title">Register Departmental Lecturer (Pre-Approval)</div>
-            <form onsubmit="onAddLecturer(event)" class="form-grid">
-              <div class="form-group"><label>Staff ID *</label><input type="text" id="alStaff" placeholder="e.g. STF02" required></div>
-              <div class="form-group"><label>Title</label><input type="text" id="alTitle" value="Dr."></div>
-              <div class="form-group"><label>Surname *</label><input type="text" id="alSur" required></div>
-              <div class="form-group"><label>First Name *</label><input type="text" id="alFirst" required></div>
-              <div class="form-group"><label>Rank</label><input type="text" id="alRank" value="Lecturer I"></div>
-              <div class="form-group"><label>Official Email *</label><input type="email" id="alEmail" required></div>
-              <div class="full"><button type="submit" class="btn btn-primary">Add Lecturer</button></div>
-            </form>
-          </div>
           <div class="card">
             <div class="card-title">All User Accounts</div>
             <div class="table-wrap" id="adminUsersBox"></div>
@@ -462,12 +572,36 @@
     </div>
   </div>
 
-  <footer>&copy; 2026 Department of Psychology, University of Delta, Agbor &bull; psyc@UNIDEL 3.0</footer>
+  <!-- CBT FEEDBACK MODAL -->
+  <div id="fbModal" class="modal hidden">
+    <div class="modal-box">
+      <div class="flex-between mb-2">
+        <strong style="color:var(--primary); font-size:1.05rem;">Assessment Submission Feedback</strong>
+        <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('fbModal').classList.add('hidden')">Close</button>
+      </div>
+      <div id="fbBody"></div>
+    </div>
+  </div>
+
+  <footer>&copy; 2026 Department of Psychology, University of Delta, Agbor &bull; psyc@UNIDEL 3.6</footer>
 
   <script>
     const TOKEN_KEY = 'PSYC_V3_TOKEN';
-    // Optional: Paste your deployed Apps Script /exec URL below if hosting on GitHub Pages
     const API_EXEC_URL = 'https://script.google.com/macros/s/AKfycbx-nPf9cs_SWB4VUahGQ2A4FMqPbQPFSEj4PbIL9D0cCa0lAUfwCIJS5TtAhlZfFmE9rg/exec';
+
+    const MODE_LABELS = {
+      HIGHEST: 'Best (Highest)',
+      AVERAGE: 'Average Score',
+      FIRST: 'First Attempt',
+      SECOND: 'Second Attempt',
+      LAST: 'Last Attempt'
+    };
+
+    const FB_LABELS = {
+      SCORE_AND_ANSWERS: 'Score & Answers',
+      SCORE_ONLY: 'Score Only',
+      HIDDEN: 'Hidden by Lecturer'
+    };
 
     const memStore = {};
     const store = {
@@ -479,7 +613,6 @@
     let token = null;
     let user = null;
     let currentView = 'vDash';
-    let coursesCache = [];
     let cbtState = { testID: null, questions: [], timer: null };
     let soundOn = true;
     let audioCtx = null;
@@ -526,6 +659,12 @@
       return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
+    function fmtDate(val) {
+      if (!val) return '-';
+      const d = new Date(val);
+      return isNaN(d.getTime()) ? String(val) : d.toLocaleString([], { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    }
+
     function api(fn, ...args) {
       if (typeof google !== 'undefined' && google.script && google.script.run) {
         return new Promise((resolve, reject) => {
@@ -534,9 +673,6 @@
             .withFailureHandler(err => reject(new Error(err && err.message ? err.message : 'Server error')))
             [fn](...args);
         });
-      }
-      if (!API_EXEC_URL) {
-        return Promise.reject(new Error('Set API_EXEC_URL in Index.html to your deployed /exec URL.'));
       }
       return fetch(API_EXEC_URL, {
         method: 'POST',
@@ -628,12 +764,18 @@
     async function onLecturerReg(e) {
       e.preventDefault();
       alertMsg('authAlert', '');
-      loading(true, 'Activating lecturer account...');
+      const p1 = document.getElementById('lPass').value;
+      if (p1 !== document.getElementById('lPass2').value) { alertMsg('authAlert', 'Passwords do not match.'); return; }
+      loading(true, 'Creating lecturer account...');
       try {
         const res = await api('registerLecturer', {
           staffID: document.getElementById('lStaff').value,
+          title: document.getElementById('lTitle').value,
+          surname: document.getElementById('lSur').value,
+          firstName: document.getElementById('lFirst').value,
+          rank: document.getElementById('lRank').value,
           email: document.getElementById('lEmail').value
-        }, document.getElementById('lPass').value);
+        }, p1);
         if (!res.success) { alertMsg('authAlert', res.message, 'error'); return; }
         e.target.reset();
         switchAuthTab(0, 'tabLogin', document.querySelectorAll('.auth-tab')[0]);
@@ -672,11 +814,12 @@
 
       const links = [
         ['vDash', 'Dashboard'],
-        ['vCourses', 'Courses'],
+        ['vCourses', 'Courses & Enrolment'],
         ['vMaterials', 'Courseware'],
-        ['vAttendance', 'Attendance'],
+        ['vAttendance', 'Attendance & Eligibility'],
         ['vTests', 'CBT & Quizzes'],
         ['vResults', 'Results'],
+        ['vDiscussions', 'Discussion Forum'],
         ['vNotices', 'Noticeboard']
       ];
       if (isAdmin) links.push(['vAdmin', 'Admin Panel']);
@@ -703,21 +846,28 @@
       loading(true, 'Loading...');
       try {
         const crsRes = await api('getCourses', token);
-        coursesCache = crsRes.courses || [];
-        const opts = '<option value="">-- Select Course --</option>' + coursesCache.map(c =>
+        const myCourses = crsRes.courses || [];
+        const opts = '<option value="">-- Select Course --</option>' + myCourses.map(c =>
           `<option value="${esc(c.courseid)}">${esc(c.coursecode)} - ${esc(c.coursetitle)}</option>`
         ).join('');
-        ['mCourse', 'aCourse', 'tCourse', 'rCourse'].forEach(id => {
+        ['mCourse', 'aCourse', 'aSummaryCourse', 'tCourse', 'rCourse'].forEach(id => {
           const el = document.getElementById(id);
           if (el) el.innerHTML = opts;
         });
 
+        const dEl = document.getElementById('dCourse');
+        if (dEl) {
+          dEl.innerHTML = '<option value="GENERAL">General Departmental Forum</option>' + myCourses.map(c =>
+            `<option value="${esc(c.courseid)}">${esc(c.coursecode)} - ${esc(c.coursetitle)}</option>`
+          ).join('');
+        }
+
         if (currentView === 'vDash') {
-          document.getElementById('dashCoursesBox').innerHTML = coursesCache.length
+          document.getElementById('dashCoursesBox').innerHTML = myCourses.length
             ? `<table><thead><tr><th>Code</th><th>Title</th><th>Level</th><th>Units</th></tr></thead><tbody>${
-                coursesCache.map(c => `<tr><td><strong>${esc(c.coursecode)}</strong></td><td>${esc(c.coursetitle)}</td><td>${esc(c.level)}</td><td>${esc(c.creditunits)}</td></tr>`).join('')
+                myCourses.map(c => `<tr><td><strong>${esc(c.coursecode)}</strong></td><td>${esc(c.coursetitle)}</td><td>${esc(c.level)}</td><td>${esc(c.creditunits)}</td></tr>`).join('')
               }</tbody></table>`
-            : '<p class="text-muted">No courses linked yet.</p>';
+            : '<p class="text-muted">No courses linked yet. Open "Courses & Enrolment" to enrol.</p>';
 
           if (user.role === 'Administrator') {
             const ov = await api('getAdminOverview', token);
@@ -735,14 +885,20 @@
         if (currentView === 'vCourses') {
           if (user.role === 'Student') {
             const cat = crsRes.catalogue || [];
-            document.getElementById('coursesBox').innerHTML = `<table><thead><tr><th>Code</th><th>Title</th><th>Level</th><th>Units</th><th>Action</th></tr></thead><tbody>${
+            document.getElementById('coursesBox').innerHTML = `<table><thead><tr><th>Code</th><th>Title</th><th>Level</th><th>Units</th><th>Self-Enrolment</th></tr></thead><tbody>${
               cat.map(c => `<tr><td><strong>${esc(c.coursecode)}</strong></td><td>${esc(c.coursetitle)}</td><td>${esc(c.level)}</td><td>${esc(c.creditunits)}</td><td>${
-                c.isEnrolled ? '<span class="badge b-green">Enrolled</span>' : `<button class="btn btn-primary btn-sm" onclick="onEnrol('${esc(c.courseid)}')">Enrol</button>`
+                c.isEnrolled ? '<span class="badge b-green">Enrolled</span>' : `<button class="btn btn-primary btn-sm" onclick="onEnrol('${esc(c.courseid)}')">Self-Enrol</button>`
               }</td></tr>`).join('')
             }</tbody></table>`;
           } else {
-            document.getElementById('coursesBox').innerHTML = `<table><thead><tr><th>Code</th><th>Title</th><th>Level</th><th>Units</th><th>Lecturer</th></tr></thead><tbody>${
-              coursesCache.map(c => `<tr><td><strong>${esc(c.coursecode)}</strong></td><td>${esc(c.coursetitle)}</td><td>${esc(c.level)}</td><td>${esc(c.creditunits)}</td><td>${esc(c.lecturerid || '-')}</td></tr>`).join('')
+            const allCrs = crsRes.allCourses || myCourses;
+            document.getElementById('coursesBox').innerHTML = `<table><thead><tr><th>Code</th><th>Title</th><th>Level</th><th>Units</th><th>Assigned Lecturer</th><th>Action</th></tr></thead><tbody>${
+              allCrs.map(c => {
+                const isMine = String(c.lecturerid).toUpperCase() === String(user.userID).toUpperCase();
+                return `<tr><td><strong>${esc(c.coursecode)}</strong></td><td>${esc(c.coursetitle)}</td><td>${esc(c.level)}</td><td>${esc(c.creditunits)}</td><td>${esc(c.lecturerid || 'Unassigned')}</td><td>${
+                  isMine ? '<span class="badge b-green">My Course</span>' : `<button class="btn btn-outline btn-sm" onclick="onClaimCourse('${esc(c.courseid)}')">Assign to Me</button>`
+                }</td></tr>`;
+              }).join('')
             }</tbody></table>`;
           }
         }
@@ -762,8 +918,8 @@
           if (user.role === 'Student') {
             const sum = aRes.summary || [];
             document.getElementById('attendanceBox').innerHTML = sum.length
-              ? `<table><thead><tr><th>Course</th><th>Classes</th><th>Attended</th><th>%</th><th>Eligibility</th></tr></thead><tbody>${
-                  sum.map(s => `<tr><td><strong>${esc(s.courseCode)}</strong></td><td>${s.totalClasses}</td><td>${s.presentCount}</td><td><strong>${s.percentage}%</strong></td><td><span class="badge ${s.eligible ? 'b-green' : 'b-red'}">${s.eligible ? 'ELIGIBLE' : 'DEFICIENT (<=75%)'}</span></td></tr>`).join('')
+              ? `<table><thead><tr><th>Course</th><th>Classes Held</th><th>Attended</th><th>Percentage</th><th>Exam Eligibility (&ge; 75%)</th></tr></thead><tbody>${
+                  sum.map(s => `<tr><td><strong>${esc(s.courseCode)}</strong> - ${esc(s.courseTitle)}</td><td>${s.totalClasses}</td><td>${s.presentCount}</td><td><strong>${s.percentage}%</strong></td><td><span class="badge ${s.eligible ? 'b-green' : 'b-red'}">${s.eligible ? 'ELIGIBLE (>= 75%)' : 'NOT ELIGIBLE (< 75%)'}</span></td></tr>`).join('')
                 }</tbody></table>`
               : '<p class="text-muted">No attendance records yet.</p>';
           } else {
@@ -780,30 +936,68 @@
           const tRes = await api('getTestsAndAttempts', token);
           const tests = tRes.tests || [];
           const atts = tRes.attempts || [];
-          document.getElementById('qTest').innerHTML = '<option value="">-- Select Test --</option>' + tests.map(t =>
+          const offScores = tRes.officialScores || [];
+
+          const testOpts = '<option value="">-- Select Test --</option>' + tests.map(t =>
             `<option value="${esc(t.testid)}">[${esc(t.coursecode)}] ${esc(t.title)}</option>`
           ).join('');
+          document.getElementById('qTest').innerHTML = testOpts;
+          document.getElementById('pTest').innerHTML = testOpts;
 
           document.getElementById('testsBox').innerHTML = tests.length
-            ? `<table><thead><tr><th>Course</th><th>Title</th><th>Type</th><th>Duration</th><th>Marks</th><th>Action</th></tr></thead><tbody>${
-                tests.map(t => `<tr><td><strong>${esc(t.coursecode)}</strong></td><td>${esc(t.title)}</td><td>${esc(t.kind)}</td><td>${esc(t.durationminutes)}m</td><td>${esc(t.totalmarks)}</td><td>${
-                  user.role === 'Student'
-                    ? `<button class="btn btn-primary btn-sm" onclick="startCBT('${esc(t.testid)}')">Start CBT</button>`
-                    : `<span class="text-muted">${esc(t.testid)}</span>`
-                }</td></tr>`).join('')
+            ? `<table><thead><tr><th>Course</th><th>Title</th><th>Schedule Window</th><th>Attempts</th><th>Scoring Mode</th><th>Feedback</th><th>Action</th></tr></thead><tbody>${
+                tests.map(t => {
+                  const maxA = Number(t.maxattempts != null ? t.maxattempts : 1);
+                  const usedA = atts.filter(a => a.testid === t.testid).length;
+                  const winBadge = t.windowStatus === 'UPCOMING' ? '<span class="badge b-amber">Upcoming</span>' : t.windowStatus === 'CLOSED' ? '<span class="badge b-red">Closed</span>' : '<span class="badge b-green">Open</span>';
+                  const schedTxt = `${winBadge}<div class="text-muted" style="font-size:0.74rem;">${t.opendatetime ? 'Opens: ' + fmtDate(t.opendatetime) + '<br>' : ''}${t.closedatetime ? 'Closes: ' + fmtDate(t.closedatetime) : 'No close deadline'}</div>`;
+                  let act = `<span class="text-muted">${esc(t.testid)}</span>`;
+                  if (user.role === 'Student') {
+                    if (!t.isOpen) act = `<span class="text-muted">${t.windowStatus === 'UPCOMING' ? 'Not Yet Open' : 'Closed'}</span>`;
+                    else if (maxA === 0 || usedA < maxA) act = `<button class="btn btn-primary btn-sm" onclick="startCBT('${esc(t.testid)}')">${usedA > 0 ? 'Retake (' + usedA + '/' + (maxA || '∞') + ')' : 'Start CBT'}</button>`;
+                    else act = `<span class="badge b-green">Completed (${usedA}/${maxA})</span>`;
+                  }
+                  return `<tr>
+                    <td><strong>${esc(t.coursecode)}</strong></td>
+                    <td>${esc(t.title)}<div class="text-muted">${esc(t.durationminutes)}m &bull; ${esc(t.totalmarks)} mks</div></td>
+                    <td>${schedTxt}</td>
+                    <td><span class="badge b-slate">${maxA === 0 ? 'Unlimited' : maxA}</span></td>
+                    <td><span class="badge b-teal">${esc(MODE_LABELS[t.scoringmethod] || t.scoringmethod || 'Best')}</span></td>
+                    <td><span class="badge b-slate">${esc(FB_LABELS[t.feedbackmode] || 'Score & Answers')}</span></td>
+                    <td>${act}</td>
+                  </tr>`;
+                }).join('')
               }</tbody></table>`
             : '<p class="text-muted">No tests scheduled yet.</p>';
 
+          document.getElementById('officialScoresBox').innerHTML = offScores.length
+            ? `<table><thead><tr><th>Course</th><th>Test</th><th>Matric No</th><th>Attempts</th><th>Scoring Mode</th><th>Official Score</th></tr></thead><tbody>${
+                offScores.map(s => `<tr><td><strong>${esc(s.courseCode)}</strong></td><td>${esc(s.testTitle)}</td><td>${esc(s.matricNo)}</td><td>${s.attemptsTaken}</td><td><span class="badge b-teal">${esc(MODE_LABELS[s.scoringMethod] || s.scoringMethod)}</span></td><td><strong>${esc(s.officialScore)}</strong></td></tr>`).join('')
+              }</tbody></table>`
+            : '<p class="text-muted">No official scores computed yet.</p>';
+
+          const groupNames = [...new Set(tests.map(t => String(t.componentgroup || '').trim()).filter(Boolean))];
+          const groupRows = [];
+          for (const groupName of groupNames) {
+            if (user.role === 'Student') continue;
+            const courseForGroup = tests.find(t => String(t.componentgroup || '').trim() === groupName);
+            if (!courseForGroup) continue;
+            const gRes = await api('getComponentGroupScores', token, courseForGroup.courseid, groupName);
+            (gRes.scores || []).forEach(sc => groupRows.push({ groupName, method:gRes.gradingMethod, ...sc }));
+          }
+          document.getElementById('componentScoresBox').innerHTML = groupRows.length
+            ? `<table><thead><tr><th>Component Group</th><th>Matric No</th><th>Student Name</th><th>Tests Included</th><th>Grading Method</th><th>Combined Percentage</th></tr></thead><tbody>${groupRows.map(g => `<tr><td><strong>${esc(g.groupName)}</strong></td><td>${esc(g.matricNo)}</td><td>${esc(g.studentName)}</td><td>${g.testsCount}</td><td>${esc(g.method)}</td><td><strong>${g.percentage}%</strong></td></tr>`).join('')}</tbody></table>`
+            : '<p class="text-muted">No component-group scores configured yet. Assign the same group name to related tests.</p>';
+
           document.getElementById('attemptsBox').innerHTML = atts.length
-            ? `<table><thead><tr><th>Test ID</th><th>Matric No</th><th>Attempt</th><th>Score</th></tr></thead><tbody>${
-                atts.map(a => `<tr><td>${esc(a.testid)}</td><td>${esc(a.matricno)}</td><td>#${esc(a.attemptnumber)}</td><td><strong>${esc(a.score)} / ${esc(a.maxscore)}</strong></td></tr>`).join('')
+            ? `<table><thead><tr><th>Test ID</th><th>Matric No</th><th>Attempt</th><th>Score</th><th>Submitted</th></tr></thead><tbody>${
+                atts.map(a => `<tr><td>${esc(a.testid)}</td><td>${esc(a.matricno)}</td><td>#${esc(a.attemptnumber)}</td><td><strong>${esc(a.score)} / ${esc(a.maxscore)}</strong></td><td>${fmtDate(a.submittedat)}</td></tr>`).join('')
               }</tbody></table>`
             : '<p class="text-muted">No attempts submitted yet.</p>';
         }
 
         if (currentView === 'vResults') {
-          const rRes = await api('getResults', token);
-          const list = rRes.results || [];
+          const rRes = await api('getResults', token);          const list = rRes.results || [];
           const gpaEl = document.getElementById('gpaBadge');
           gpaEl.classList.add('hidden');
 
@@ -819,6 +1013,33 @@
                 list.map(r => `<tr><td><strong>${esc(r.coursecode)}</strong> - ${esc(r.coursetitle)}</td>${user.role !== 'Student' ? `<td>${esc(r.matricno)}</td>` : ''}<td>${esc(r.cascore)}</td><td>${esc(r.examscore)}</td><td><strong>${esc(r.totalscore)}</strong></td><td><span class="badge ${r.grade === 'F' ? 'b-red' : 'b-green'}">${esc(r.grade)}</span></td></tr>`).join('')
               }</tbody></table>`
             : '<p class="text-muted">No compiled results yet.</p>';
+        }
+
+        if (currentView === 'vDiscussions') {
+          const dRes = await api('getDiscussions', token);
+          const topics = dRes.topics || [];
+          document.getElementById('discussionsBox').innerHTML = topics.length
+            ? topics.map(t => `
+                <div class="card">
+                  <div class="flex-between mb-2">
+                    <strong>${esc(t.title)}</strong>
+                    <span class="badge b-green">${esc(t.coursecode)}</span>
+                  </div>
+                  <p>${esc(t.body)}</p>
+                  <div class="text-muted mt-1">Posted by ${esc(t.authorname)} (${esc(t.authorrole)}) &bull; ${fmtDate(t.datecreated)}</div>
+                  <div class="mt-2">
+                    ${(t.replies || []).map(r => `
+                      <div class="reply-item">
+                        <div>${esc(r.body)}</div>
+                        <div class="text-muted">${esc(r.authorname)} (${esc(r.authorrole)}) &bull; ${fmtDate(r.dateposted)}</div>
+                      </div>`).join('')}
+                  </div>
+                  <div class="flex-between mt-2">
+                    <input type="text" id="rep_${esc(t.topicid)}" placeholder="Write a reply..." style="flex:1;">
+                    <button type="button" class="btn btn-outline btn-sm" onclick="onReplyTopic('${esc(t.topicid)}')">Reply</button>
+                  </div>
+                </div>`).join('')
+            : '<div class="card"><p class="text-muted">No discussion threads yet. Start the first topic above!</p></div>';
         }
 
         if (currentView === 'vNotices') {
@@ -864,8 +1085,17 @@
       } finally { loading(false); }
     }
 
+    async function onClaimCourse(courseID) {
+      loading(true, 'Assigning course...');
+      try {
+        const res = await api('claimCourseAsLecturer', token, courseID);
+        alertMsg('appAlert', res.message, res.success ? 'success' : 'error');
+        if (res.success) await refreshView();
+      } finally { loading(false); }
+    }
+
     async function onEnrol(courseID) {
-      loading(true, 'Enrolling...');
+      loading(true, 'Enrolling in course...');
       try {
         const res = await api('enrolStudentInCourse', token, courseID);
         alertMsg('appAlert', res.message, res.success ? 'success' : 'error');
@@ -933,12 +1163,32 @@
       } finally { loading(false); }
     }
 
-    async function onDownloadEligibilityPDF() {
-      const cid = document.getElementById('aCourse').value;
-      if (!cid) { alertMsg('appAlert', 'Select a course first.'); return; }
-      loading(true, 'Generating PDF...');
+    async function loadStaffAttendanceSummary() {
+      const cid = document.getElementById('aSummaryCourse').value;
+      const box = document.getElementById('attSummaryBox');
+      const meta = document.getElementById('attSummaryMeta');
+      if (!cid) { box.innerHTML = ''; meta.textContent = ''; return; }
+      loading(true, 'Computing attendance totals & percentages...');
       try {
-        const res = await api('generateEligibilityPDF', token, cid);
+        const res = await api('getCourseAttendanceSummary', token, cid);
+        if (!res.success) { alertMsg('appAlert', res.message); return; }
+        const list = res.summary || [];
+        const eligCount = list.filter(s => s.eligible).length;
+        meta.textContent = `${res.courseCode} - ${res.courseTitle} • Total Lectures Held: ${res.totalLecturesHeld} • Eligible Candidates (>= 75%): ${eligCount} of ${list.length}`;
+        box.innerHTML = list.length
+          ? `<table><thead><tr><th>Matric No</th><th>Student Name</th><th>Total Attended</th><th>Total Lectures</th><th>Percentage</th><th>Eligibility (&ge; 75%)</th></tr></thead><tbody>${
+              list.map(s => `<tr><td><strong>${esc(s.matricNo)}</strong></td><td>${esc(s.studentName)}</td><td>${s.totalAttended}</td><td>${s.totalLectures}</td><td><strong>${s.percentage}%</strong></td><td><span class="badge ${s.eligible ? 'b-green' : 'b-red'}">${s.eligible ? 'ELIGIBLE (>= 75%)' : 'BELOW 75%'}</span></td></tr>`).join('')
+            }</tbody></table>`
+          : '<p class="text-muted">No enrolled students found.</p>';
+      } finally { loading(false); }
+    }
+
+    async function onDownloadEligiblePDF() {
+      const cid = document.getElementById('aSummaryCourse').value || document.getElementById('aCourse').value;
+      if (!cid) { alertMsg('appAlert', 'Select a course first.'); return; }
+      loading(true, 'Generating Eligible Exam Candidates PDF...');
+      try {
+        const res = await api('generateEligibleCandidatesPDF', token, cid);
         if (!res.success) { alertMsg('appAlert', res.message); return; }
         const bytes = atob(res.base64Pdf);
         const arr = new Uint8Array(bytes.length);
@@ -947,8 +1197,24 @@
         const a = document.createElement('a');
         a.href = url; a.download = res.fileName; a.click();
         URL.revokeObjectURL(url);
-        alertMsg('appAlert', `Downloaded ${res.fileName} (${res.count} student(s)).`, 'success');
+        alertMsg('appAlert', `Downloaded ${res.fileName}: ${res.count} eligible of ${res.total} enrolled students.`, 'success');
       } finally { loading(false); }
+    }
+
+    async function onExportResultsExcel() {
+      const courseID = (user && user.role !== 'Administrator') ? '' : '';
+      loading(true, 'Preparing Excel results workbook...');
+      try {
+        const res = await api('exportResultsToExcel', token, courseID);
+        if (!res || !res.success) { alertMsg('appAlert', res && res.message ? res.message : 'Excel export failed.'); return; }
+        const bytes = atob(res.base64);
+        const arr = new Uint8Array(bytes.length);
+        for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+        const url = URL.createObjectURL(new Blob([arr], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+        const a = document.createElement('a'); a.href = url; a.download = res.fileName; a.click(); URL.revokeObjectURL(url);
+        alertMsg('appAlert', `Exported ${res.count} result record(s) to ${res.fileName}.`, 'success');
+      } catch (err) { alertMsg('appAlert', err.message, 'error'); }
+      finally { loading(false); }
     }
 
     function toggleQFields() {
@@ -960,18 +1226,48 @@
 
     async function onCreateTest(e) {
       e.preventDefault();
-      loading(true, 'Creating test...');
+      loading(true, 'Creating scheduled test...');
       try {
         const res = await api('createTest', token, {
           kind: document.getElementById('tKind').value,
           courseID: document.getElementById('tCourse').value,
           title: document.getElementById('tTitle').value,
           durationMinutes: document.getElementById('tDur').value,
+          openDateTime: document.getElementById('tOpen').value,
+          closeDateTime: document.getElementById('tClose').value,
           totalMarks: document.getElementById('tMarks').value,
-          maxAttempts: document.getElementById('tMaxAtt').value
+          maxAttempts: document.getElementById('tMaxAtt').value,
+          scoringMethod: document.getElementById('tScoreMode').value,
+          feedbackMode: document.getElementById('tFeedback').value,
+          componentGroup: document.getElementById('tComponentGroup').value,
+          componentGradingMethod: document.getElementById('tComponentMode').value,
+          selectedTestID: document.getElementById('tSelectedTest').value
         });
         alertMsg('appAlert', res.message, res.success ? 'success' : 'error');
         if (res.success) { e.target.reset(); await refreshView(); }
+      } finally { loading(false); }
+    }
+
+    async function onUpdateTestPolicy(e) {
+      e.preventDefault();
+      loading(true, 'Updating test settings...');
+      try {
+        const payload = {
+          maxAttempts: document.getElementById('pMaxAtt').value,
+          scoringMethod: document.getElementById('pScoreMode').value,
+          feedbackMode: document.getElementById('pFeedback').value,
+          componentGroup: document.getElementById('pComponentGroup').value,
+          componentGradingMethod: document.getElementById('pComponentMode').value,
+          selectedTestID: document.getElementById('pSelectedTest').value
+        };
+        const op = document.getElementById('pOpen').value;
+        const cl = document.getElementById('pClose').value;
+        if (op) payload.openDateTime = op;
+        if (cl) payload.closeDateTime = cl;
+
+        const res = await api('updateTestSettings', token, document.getElementById('pTest').value, payload);
+        alertMsg('appAlert', res.message, res.success ? 'success' : 'error');
+        if (res.success) await refreshView();
       } finally { loading(false); }
     }
 
@@ -1018,6 +1314,13 @@
         document.getElementById('cbtModal').classList.remove('hidden');
 
         let secs = Number(res.test.durationminutes || 30) * 60;
+        if (res.test.closedatetime) {
+          const closeMs = new Date(res.test.closedatetime).getTime();
+          if (!isNaN(closeMs)) {
+            const left = Math.floor((closeMs - Date.now()) / 1000);
+            if (left > 0 && left < secs) secs = left;
+          }
+        }
         cbtState.timer = setInterval(() => {
           const m = Math.floor(secs / 60), s = secs % 60;
           document.getElementById('cbtTimer').textContent = `Time: ${m}:${s < 10 ? '0' + s : s}`;
@@ -1043,10 +1346,26 @@
         }
       });
       document.getElementById('cbtModal').classList.add('hidden');
-      loading(true, 'Auto-grading...');
+      loading(true, 'Submitting & evaluating...');
       try {
         const res = await api('submitCBTAttempt', token, cbtState.testID, answers);
         alertMsg('appAlert', res.message, res.success ? 'success' : 'error');
+
+        if (res.success && res.feedbackMode !== 'HIDDEN') {
+          let fbHtml = `<div class="alert alert-success">Attempt #${res.attemptNumber} Score: <strong>${res.score} / ${res.maxScore}</strong></div>`;
+          if (res.review && res.review.length) {
+            fbHtml += res.review.map(r => `
+              <div class="q-box">
+                <div><strong>Q${r.number}. ${esc(r.questionText)}</strong></div>
+                <div class="mt-1">Your Answer: <strong>${esc(r.yourAnswer)}</strong> &nbsp; <span class="badge ${r.isCorrect ? 'b-green' : 'b-red'}">${r.isCorrect ? 'Correct' : 'Incorrect'}</span></div>
+                ${!r.isCorrect ? `<div class="text-muted mt-1">Correct Answer: <strong>${esc(r.correctAnswer)}</strong></div>` : ''}
+              </div>`).join('');
+          } else {
+            fbHtml += '<p class="text-muted">Your lecturer has enabled Score-Only feedback for this test.</p>';
+          }
+          document.getElementById('fbBody').innerHTML = fbHtml;
+          document.getElementById('fbModal').classList.remove('hidden');
+        }
         await refreshView();
       } finally { loading(false); }
     }
@@ -1066,6 +1385,30 @@
       } finally { loading(false); }
     }
 
+    async function onCreateTopic(e) {
+      e.preventDefault();
+      loading(true, 'Posting discussion topic...');
+      try {
+        const res = await api('createDiscussionTopic', token,
+          document.getElementById('dCourse').value,
+          document.getElementById('dTitle').value,
+          document.getElementById('dBody').value
+        );
+        alertMsg('appAlert', res.message, res.success ? 'success' : 'error');
+        if (res.success) { e.target.reset(); await refreshView(); }
+      } finally { loading(false); }
+    }
+
+    async function onReplyTopic(topicID) {
+      const inp = document.getElementById('rep_' + topicID);
+      if (!inp || !inp.value.trim()) return;
+      loading(true, 'Posting reply...');
+      try {
+        const res = await api('replyDiscussionTopic', token, topicID, inp.value.trim());
+        if (res.success) await refreshView();
+      } finally { loading(false); }
+    }
+
     async function onPostNotice(e) {
       e.preventDefault();
       loading(true, 'Publishing...');
@@ -1073,23 +1416,6 @@
         const res = await api('postAnnouncement', token, {
           title: document.getElementById('nTitle').value,
           body: document.getElementById('nBody').value
-        });
-        alertMsg('appAlert', res.message, res.success ? 'success' : 'error');
-        if (res.success) { e.target.reset(); await refreshView(); }
-      } finally { loading(false); }
-    }
-
-    async function onAddLecturer(e) {
-      e.preventDefault();
-      loading(true, 'Adding lecturer...');
-      try {
-        const res = await api('addLecturerRecord', token, {
-          staffID: document.getElementById('alStaff').value,
-          title: document.getElementById('alTitle').value,
-          surname: document.getElementById('alSur').value,
-          firstName: document.getElementById('alFirst').value,
-          rank: document.getElementById('alRank').value,
-          email: document.getElementById('alEmail').value
         });
         alertMsg('appAlert', res.message, res.success ? 'success' : 'error');
         if (res.success) { e.target.reset(); await refreshView(); }
