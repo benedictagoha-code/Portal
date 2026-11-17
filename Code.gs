@@ -1,5 +1,5 @@
 /**
- * psyc@UNIDEL 3.6 — Enhanced Academic & Courseware Management System
+ * psyc@UNIDEL 3.7 — Enhanced Academic & Courseware Management System
  * Department of Psychology, University of Delta, Agbor
  * Run setupSystem() ONCE from the editor, then Deploy -> New version.
  */
@@ -95,7 +95,7 @@ function setupSystem() {
   if (setSh.getLastRow() === 1) {
     [
       ['SystemName', 'psyc@UNIDEL'],
-      ['Version', '3.6'],
+      ['Version', '3.7'],
       ['Institution', 'University of Delta, Agbor'],
       ['Department', 'Department of Psychology'],
       ['AcademicSession', '2025/2026'],
@@ -148,6 +148,24 @@ function upgradeSystem36() {
   const minAtt = rows.find(r => String(r.key).toLowerCase() === 'minimumattendance');
   if (!minAtt) settings.appendRow(['MinimumAttendance', '75']);
   return { success: true, version: '3.6', addedColumns: missing, message: '3.6 database migration completed. Existing records were retained.' };
+}
+
+
+/**
+ * Non-destructive 3.7 migration.
+ * No database tables or existing records are recreated or cleared.
+ */
+function upgradeSystem37() {
+  const ss = getDB_();
+  const settings = ss.getSheetByName(SHEETS.SETTINGS);
+  if (!settings) throw new Error('Settings sheet not found. Existing database was not changed.');
+  const rows = getRows_(SHEETS.SETTINGS);
+  const version = rows.find(r => String(r.key).trim().toLowerCase() === 'version');
+  if (version) settings.getRange(version._row, 2).setValue('3.7');
+  else settings.appendRow(['Version', '3.7']);
+  const attendance = rows.find(r => String(r.key).trim().toLowerCase() === 'minimumattendance');
+  if (!attendance) settings.appendRow(['MinimumAttendance', 75]);
+  return { success: true, version: '3.7', message: '3.7 upgrade completed. Existing student, attendance, assessment and result records were retained.' };
 }
 
 /* ============================================================
@@ -243,14 +261,14 @@ function getPublicInfo() {
     return {
       success: true,
       systemName: map.SystemName || 'psyc@UNIDEL',
-      version: map.Version || '3.6',
+      version: map.Version || '3.7',
       institution: map.Institution || 'University of Delta, Agbor',
       department: map.Department || 'Department of Psychology',
       academicSession: map.AcademicSession || '2025/2026',
       semester: map.Semester || 'First Semester'
     };
   } catch (e) {
-    return { success: true, systemName: 'psyc@UNIDEL', version: '3.6', institution: 'University of Delta, Agbor', department: 'Department of Psychology' };
+    return { success: true, systemName: 'psyc@UNIDEL', version: '3.7', institution: 'University of Delta, Agbor', department: 'Department of Psychology' };
   }
 }
 
@@ -1122,7 +1140,7 @@ function toggleUserStatus(token, targetUserID, newStatus) {
 function doGet(e) {
   return HtmlService
     .createHtmlOutputFromFile('Index')
-    .setTitle('psyc@UNIDEL 3.6 — Department of Psychology')
+    .setTitle('psyc@UNIDEL 3.7 — Department of Psychology')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
