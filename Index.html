@@ -156,9 +156,12 @@
 
     @media (max-width: 768px) {
       .shell { flex-direction: column; padding: 0.85rem; }
-      .sidebar { width: 100%; display: flex; overflow-x: auto; gap: 0.3rem; padding: 0.5rem; }
-      .nav-btn { white-space: nowrap; margin-bottom: 0; }
+      .sidebar { width: 100%; display: flex; flex-wrap: wrap; overflow: visible; gap: 0.35rem; padding: 0.55rem; }
+      .nav-btn { white-space: normal; flex: 1 1 auto; min-width: 125px; margin-bottom: 0; text-align: center; }
       .form-grid { grid-template-columns: 1fr; }
+      .card { padding: 0.95rem; }
+      .table-wrap { -webkit-overflow-scrolling: touch; }
+      .btn { min-height: 40px; }
     }
   </style>
 </head>
@@ -338,6 +341,18 @@
             </div>
 
             <div class="card">
+              <div class="card-title">Upload Attendance from CSV (Bulk Import)</div>
+              <p class="text-muted mb-2">CSV columns: <strong>MatricNo,Status</strong>. Status must be PRESENT, ABSENT or LATE. Every student must already be enrolled in the selected course. Invalid rows are rejected before any attendance is saved.</p>
+              <form onsubmit="onUploadAttendanceCSV(event)" class="form-grid">
+                <div class="form-group"><label>Course *</label><select id="aUploadCourse" required></select></div>
+                <div class="form-group"><label>Lecture Date *</label><input type="date" id="aUploadDate" required></div>
+                <div class="form-group full"><label>Lecture Topic</label><input type="text" id="aUploadTopic" placeholder="Lecture topic"></div>
+                <div class="form-group full"><label>Attendance CSV File *</label><input type="file" id="aUploadFile" accept=".csv,text/csv" required></div>
+                <div class="full"><button type="submit" class="btn btn-primary">Validate &amp; Upload Attendance</button></div>
+              </form>
+            </div>
+
+            <div class="card">
               <div class="flex-between mb-2">
                 <div class="card-title" style="margin:0;">Total Attendance, Percentage &amp; Eligible Candidates (&ge; 75%)</div>
                 <div class="flex-between">
@@ -497,6 +512,30 @@
           </div>
         </section>
 
+        <!-- DEDICATED EXAMINATION SETTINGS -->
+        <section id="vExamSettings" class="view hidden">
+          <div class="card">
+            <div class="card-title">Examination &amp; Quiz Settings</div>
+            <p class="text-muted mb-2">Select an existing quiz or CBT examination to edit its schedule, attempt limit, score computation, feedback and assessment-component grading policy.</p>
+            <form onsubmit="onUpdateExamSettings(event)" class="form-grid">
+              <div class="form-group full"><label>Select Quiz / CBT Examination *</label><select id="esTest" required onchange="loadExamSettingsForm()"></select></div>
+              <div class="form-group"><label>Number of Attempts</label><select id="esMaxAtt"><option value="1">1 Attempt</option><option value="2">2 Attempts</option><option value="3">3 Attempts</option><option value="5">5 Attempts</option><option value="0">Unlimited</option></select></div>
+              <div class="form-group"><label>Score Computation</label><select id="esScoreMode"><option value="HIGHEST">Highest Score</option><option value="AVERAGE">Average Score</option><option value="FIRST">First Attempt</option><option value="SECOND">Second Attempt</option><option value="LAST">Last Attempt</option></select></div>
+              <div class="form-group"><label>Feedback to Students</label><select id="esFeedback"><option value="SCORE_AND_ANSWERS">Show Score &amp; Answers</option><option value="SCORE_ONLY">Show Score Only</option><option value="HIDDEN">Withhold Score Until Released</option></select></div>
+              <div class="form-group"><label>Component Group</label><input id="esComponentGroup" type="text" placeholder="e.g. CA, Quizzes"></div>
+              <div class="form-group"><label>Group Grading Method</label><select id="esComponentMode"><option value="AVERAGE">Average all tests in group</option><option value="SPECIFIC">Use a particular test</option></select></div>
+              <div class="form-group"><label>Selected Test ID (if specific)</label><input id="esSelectedTest" type="text"></div>
+              <div class="form-group"><label>Open Date &amp; Time</label><input id="esOpen" type="datetime-local"></div>
+              <div class="form-group"><label>Close Date &amp; Time</label><input id="esClose" type="datetime-local"></div>
+              <div class="full"><button type="submit" class="btn btn-primary">Save Examination Settings</button></div>
+            </form>
+          </div>
+          <div class="card">
+            <div class="card-title">Scheduled Quizzes and CBT Examinations</div>
+            <div class="table-wrap" id="examSettingsListBox"></div>
+          </div>
+        </section>
+
         <!-- 6. RESULTS -->
         <section id="vResults" class="view hidden">
           <div id="staffResBox" class="card hidden">
@@ -614,6 +653,7 @@
     let user = null;
     let currentView = 'vDash';
     let cbtState = { testID: null, questions: [], timer: null };
+    let examSettingsCache = [];
     let soundOn = true;
     let audioCtx = null;
 
@@ -799,8 +839,9 @@
       document.getElementById('authScreen').classList.add('hidden');
       document.getElementById('appScreen').classList.remove('hidden');
 
-      const isAdmin = user.role === 'Administrator';
-      const isStaff = isAdmin || user.role === 'Lecturer';
+      const roleName = String(user.role || '').trim().toLowerCase();
+      const isAdmin = roleName === 'administrator';
+      const isStaff = isAdmin || roleName === 'lecturer';
 
       document.getElementById('navUserLabel').textContent = `${user.name} (${user.role})`;
       document.getElementById('dashWelcome').textContent = `Welcome, ${user.name}`;
@@ -817,11 +858,12 @@
         ['vCourses', 'Courses & Enrolment'],
         ['vMaterials', 'Courseware'],
         ['vAttendance', 'Attendance & Eligibility'],
-        ['vTests', 'CBT & Quizzes'],
-        ['vResults', 'Results'],
+        ['vTests', 'Quizzes & CBT Exams'],
+        ['vResults', 'Results & Compilation'],
         ['vDiscussions', 'Discussion Forum'],
         ['vNotices', 'Noticeboard']
       ];
+      if (isStaff) links.push(['vExamSettings', 'Examination Settings']);
       if (isAdmin) links.push(['vAdmin', 'Admin Panel']);
 
       document.getElementById('sideNav').innerHTML = links.map(([id, label], i) =>
@@ -850,7 +892,7 @@
         const opts = '<option value="">-- Select Course --</option>' + myCourses.map(c =>
           `<option value="${esc(c.courseid)}">${esc(c.coursecode)} - ${esc(c.coursetitle)}</option>`
         ).join('');
-        ['mCourse', 'aCourse', 'aSummaryCourse', 'tCourse', 'rCourse'].forEach(id => {
+        ['mCourse', 'aCourse', 'aSummaryCourse', 'aUploadCourse', 'tCourse', 'rCourse'].forEach(id => {
           const el = document.getElementById(id);
           if (el) el.innerHTML = opts;
         });
@@ -930,6 +972,18 @@
                 }</tbody></table>`
               : '<p class="text-muted">No attendance logs yet.</p>';
           }
+        }
+
+        if (currentView === 'vExamSettings') {
+          const settingsRes = await api('getTestsAndAttempts', token);
+          examSettingsCache = settingsRes.tests || [];
+          const settingOpts = '<option value="">-- Select Quiz / CBT Examination --</option>' + examSettingsCache.map(t =>
+            `<option value="${esc(t.testid)}">[${esc(t.coursecode)}] ${esc(t.title)}</option>`
+          ).join('');
+          document.getElementById('esTest').innerHTML = settingOpts;
+          document.getElementById('examSettingsListBox').innerHTML = examSettingsCache.length
+            ? `<table><thead><tr><th>Course</th><th>Assessment</th><th>Category</th><th>Duration</th><th>Marks</th><th>Window</th></tr></thead><tbody>${examSettingsCache.map(t => `<tr><td>${esc(t.coursecode)}</td><td>${esc(t.title)}</td><td>${esc(t.kind)}</td><td>${esc(t.durationminutes)} min</td><td>${esc(t.totalmarks)}</td><td>${esc(t.windowStatus)}</td></tr>`).join('')}</tbody></table>`
+            : '<p class="text-muted">No quizzes or CBT examinations have been created.</p>';
         }
 
         if (currentView === 'vTests') {
@@ -1131,6 +1185,56 @@
       } finally { loading(false); }
     }
 
+    function parseAttendanceCSV(text) {
+      const rows = [];
+      let row = [], cell = '', quoted = false;
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        if (ch === '"') {
+          if (quoted && text[i + 1] === '"') { cell += '"'; i++; }
+          else quoted = !quoted;
+        } else if (ch === ',' && !quoted) { row.push(cell.trim()); cell = ''; }
+        else if ((ch === '\n' || ch === '\r') && !quoted) {
+          if (ch === '\r' && text[i + 1] === '\n') i++;
+          row.push(cell.trim()); cell = '';
+          if (row.some(v => v !== '')) rows.push(row);
+          row = [];
+        } else cell += ch;
+      }
+      row.push(cell.trim());
+      if (row.some(v => v !== '')) rows.push(row);
+      if (!rows.length) return [];
+      const header = rows[0].map(v => v.toLowerCase().replace(/[ _-]/g, ''));
+      const hasHeader = header.some(v => ['matricno','matriculationno','matriculationnumber','matric'].includes(v));
+      const start = hasHeader ? 1 : 0;
+      const matricIndex = hasHeader ? header.findIndex(v => ['matricno','matriculationno','matriculationnumber','matric'].includes(v)) : 0;
+      const statusIndex = hasHeader ? header.findIndex(v => ['status','attendance','attendancestatus'].includes(v)) : 1;
+      if (matricIndex < 0 || statusIndex < 0) throw new Error('CSV must contain MatricNo and Status columns.');
+      return rows.slice(start).filter(r => r[matricIndex]).map(r => ({ matricNo: r[matricIndex], status: String(r[statusIndex] || '').trim().toUpperCase() }));
+    }
+
+    async function onUploadAttendanceCSV(e) {
+      e.preventDefault();
+      const file = document.getElementById('aUploadFile').files[0];
+      if (!file) { alertMsg('appAlert', 'Choose a CSV file first.'); return; }
+      loading(true, 'Validating attendance CSV...');
+      try {
+        const csv = await file.text();
+        const entries = parseAttendanceCSV(csv);
+        if (!entries.length) throw new Error('The CSV contains no attendance rows.');
+        const payload = {
+          courseID: document.getElementById('aUploadCourse').value,
+          lectureDate: document.getElementById('aUploadDate').value,
+          topic: document.getElementById('aUploadTopic').value,
+          entries: entries
+        };
+        const result = await api('bulkUploadAttendance', token, payload);
+        alertMsg('appAlert', result.message || 'Attendance upload completed.', result.success ? 'success' : 'error');
+        if (result.success) { e.target.reset(); await refreshView(); }
+      } catch (err) { alertMsg('appAlert', err.message || 'Attendance upload failed.', 'error'); }
+      finally { loading(false); }
+    }
+
     async function loadAttendanceRoster() {
       const cid = document.getElementById('aCourse').value;
       const box = document.getElementById('attRosterBox');
@@ -1246,6 +1350,42 @@
         alertMsg('appAlert', res.message, res.success ? 'success' : 'error');
         if (res.success) { e.target.reset(); await refreshView(); }
       } finally { loading(false); }
+    }
+
+    function loadExamSettingsForm() {
+      const test = examSettingsCache.find(t => String(t.testid) === String(document.getElementById('esTest').value));
+      if (!test) return;
+      document.getElementById('esMaxAtt').value = String(test.maxattempts != null ? test.maxattempts : 1);
+      document.getElementById('esScoreMode').value = test.scoringmethod || 'HIGHEST';
+      document.getElementById('esFeedback').value = test.feedbackmode || 'SCORE_AND_ANSWERS';
+      document.getElementById('esComponentGroup').value = test.componentgroup || '';
+      document.getElementById('esComponentMode').value = test.componentgradingmethod || 'AVERAGE';
+      document.getElementById('esSelectedTest').value = test.selectedtestid || '';
+      document.getElementById('esOpen').value = test.opendatetime ? new Date(test.opendatetime).toISOString().slice(0,16) : '';
+      document.getElementById('esClose').value = test.closedatetime ? new Date(test.closedatetime).toISOString().slice(0,16) : '';
+    }
+
+    async function onUpdateExamSettings(e) {
+      e.preventDefault();
+      const testID = document.getElementById('esTest').value;
+      if (!testID) { alertMsg('appAlert', 'Select an assessment first.'); return; }
+      loading(true, 'Saving examination settings...');
+      try {
+        const payload = {
+          maxAttempts: document.getElementById('esMaxAtt').value,
+          scoringMethod: document.getElementById('esScoreMode').value,
+          feedbackMode: document.getElementById('esFeedback').value,
+          componentGroup: document.getElementById('esComponentGroup').value,
+          componentGradingMethod: document.getElementById('esComponentMode').value,
+          selectedTestID: document.getElementById('esSelectedTest').value,
+          openDateTime: document.getElementById('esOpen').value,
+          closeDateTime: document.getElementById('esClose').value
+        };
+        const result = await api('updateTestSettings', token, testID, payload);
+        alertMsg('appAlert', result.message, result.success ? 'success' : 'error');
+        if (result.success) await refreshView();
+      } catch (err) { alertMsg('appAlert', err.message, 'error'); }
+      finally { loading(false); }
     }
 
     async function onUpdateTestPolicy(e) {
