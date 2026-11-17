@@ -1145,7 +1145,7 @@ function getDiscussions(token) {
     const myCourses = new Set(getRows_(SHEETS.ENROLMENTS).filter(e => normaliseMatric_(e.matricno) === normaliseMatric_(user.userID)).map(e => e.courseid));
     topics = topics.filter(t => !t.courseid || t.courseid === 'GENERAL' || myCourses.has(t.courseid));
   } else if (user.role === 'Lecturer') {
-    const myCourses = new Set(getRows_(SHEETS.COURSES).filter(c => String(c.lecturerid).toUpperCase() === String(user.userID).toUpperCase()).map(c => c.courseid));
+    const myCourses = new Set(getRows_(SHEETS.COURSES).filter(c => getCourseLecturerIds_(c).indexOf(String(user.userID).trim().toUpperCase()) >= 0).map(c => c.courseid));
     topics = topics.filter(t => !t.courseid || t.courseid === 'GENERAL' || myCourses.has(t.courseid));
   }
   topics = topics.reverse();
