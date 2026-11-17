@@ -515,7 +515,11 @@
             <div class="form-grid mt-2">
               <div class="form-group"><label>Assessment to receive selected question</label><select id="bankTargetTest"></select></div>
               <div class="form-group"><label>Saved questions</label><select id="bankQuestionSelect"></select></div>
-              <div class="full"><button type="button" class="btn btn-primary" onclick="onAddBankQuestionToTest()">Add Selected Question to Assessment</button></div>
+              <div class="full">
+                <button type="button" class="btn btn-secondary" onclick="onEditSelectedBankQuestion()">Edit Selected Question</button>
+                <button type="button" class="btn btn-secondary" onclick="onArchiveSelectedBankQuestion()">Archive Selected Question</button>
+                <button type="button" class="btn btn-primary" onclick="onAddBankQuestionToTest()">Add Selected Question to Assessment</button>
+              </div>
             </div>
             <div class="table-wrap" id="bankQuestionsBox"><p class="text-muted">Select a course to view its available test-bank questions.</p></div>
           </div>
@@ -682,6 +686,8 @@
     let currentView = 'vDash';
     let cbtState = { testID: null, questions: [], timer: null };
     let examSettingsCache = [];
+    let bankQuestionCache = [];
+    let bankEditingId = null;
     let soundOn = true;
     let audioCtx = null;
 
@@ -1470,6 +1476,7 @@
       if (!courseID) { select.innerHTML = '<option value="">-- Select Course First --</option>'; box.innerHTML = ''; return; }
       try {
         const res = await api('listBankQuestions', token, courseID), qs = res.questions || [];
+        bankQuestionCache = qs;
         select.innerHTML = '<option value="">-- Select Saved Question --</option>' + qs.map(q => '<option value="'+esc(q.bankquestionid)+'">'+esc(q.topic || q.questiontext).slice(0,90)+' ['+esc(q.difficulty)+']</option>').join('');
         box.innerHTML = qs.length ? '<table><thead><tr><th>Topic</th><th>Question</th><th>Type</th><th>Access</th><th>Owner</th></tr></thead><tbody>' + qs.map(q=>'<tr><td>'+esc(q.topic||'-')+'</td><td>'+esc(q.questiontext)+'</td><td>'+esc(q.questiontype)+'</td><td>'+esc(q.sharing)+'</td><td>'+esc(q.ownerid)+'</td></tr>').join('') + '</tbody></table>' : '<p class="text-muted">No saved questions for this course yet.</p>';
       } catch(err) { box.innerHTML = '<p class="text-muted">'+esc(err.message)+'</p>'; }
@@ -1482,8 +1489,33 @@
         optionA:document.getElementById('bankA').value,optionB:document.getElementById('bankB').value,optionC:document.getElementById('bankC').value,optionD:document.getElementById('bankD').value,
         correctAnswer:document.getElementById('bankAnswer').value,marks:document.getElementById('bankMarks').value,explanation:document.getElementById('bankExplanation').value};
       loading(true,'Saving to Test Bank...');
-      try { const res=await api('saveBankQuestion',token,payload); alertMsg('appAlert',res.message,res.success?'success':'error'); if(res.success){e.target.reset();await loadBankQuestions();} }
+      try { const res=bankEditingId ? await api('updateBankQuestion',token,bankEditingId,payload) : await api('saveBankQuestion',token,payload); alertMsg('appAlert',res.message,res.success?'success':'error'); if(res.success){bankEditingId=null;e.target.reset();await loadBankQuestions();} }
       catch(err){alertMsg('appAlert',err.message,'error');} finally{loading(false);}
+    }
+    function onEditSelectedBankQuestion() {
+      const id=document.getElementById('bankQuestionSelect').value, q=bankQuestionCache.find(x=>String(x.bankquestionid)===String(id));
+      if(!q){alertMsg('appAlert','Select a saved question first.','error');return;}
+      if(user.role!=='Administrator'&&String(q.ownerid).toUpperCase()!==String(user.userID).toUpperCase()){alertMsg('appAlert','Only the question owner can edit it.','error');return;}
+      bankEditingId=id;
+      document.getElementById('bankType').value=q.questiontype||'MCQ';
+      document.getElementById('bankTopic').value=q.topic||'';
+      document.getElementById('bankDifficulty').value=q.difficulty||'MEDIUM';
+      document.getElementById('bankSharing').value=q.sharing||'PRIVATE';
+      document.getElementById('bankText').value=q.questiontext||'';
+      document.getElementById('bankA').value=q.optiona||'';document.getElementById('bankB').value=q.optionb||'';
+      document.getElementById('bankC').value=q.optionc||'';document.getElementById('bankD').value=q.optiond||'';
+      document.getElementById('bankAnswer').value=q.correctanswer||'';
+      document.getElementById('bankMarks').value=q.marks||1;
+      document.getElementById('bankExplanation').value=q.explanation||'';
+      alertMsg('appAlert','Editing saved question '+id+'. Save the form to update it.','success');
+    }
+    async function onArchiveSelectedBankQuestion() {
+      const id=document.getElementById('bankQuestionSelect').value;
+      if(!id){alertMsg('appAlert','Select a saved question first.','error');return;}
+      if(!confirm('Archive this question? Existing assessments will not be affected.'))return;
+      loading(true,'Archiving question...');
+      try{const res=await api('archiveBankQuestion',token,id);alertMsg('appAlert',res.message,res.success?'success':'error');if(res.success)await loadBankQuestions();}
+      catch(err){alertMsg('appAlert',err.message,'error');}finally{loading(false);}
     }
     async function onAddBankQuestionToTest() {
       const testID=document.getElementById('bankTargetTest').value, questionID=document.getElementById('bankQuestionSelect').value;
