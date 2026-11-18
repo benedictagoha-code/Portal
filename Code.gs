@@ -146,10 +146,6 @@ function upgradeSystem36() {
   const headers = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(v => String(v).trim());
   const missing = required.filter(h => headers.indexOf(h) === -1);
   if (missing.length) sh.getRange(1, lastCol + 1, 1, missing.length).setValues([missing]).setFontWeight('bold');
-  const usersSheet = ss.getSheetByName(SHEETS.USERS);
-  if (!usersSheet) throw new Error('Users sheet is missing. No migration was performed.');
-  const userHeaders = usersSheet.getRange(1,1,1,Math.max(1,usersSheet.getLastColumn())).getValues()[0].map(v => String(v).trim().toLowerCase());
-  if (userHeaders.indexOf('email') < 0) usersSheet.getRange(1,usersSheet.getLastColumn()+1).setValue('Email').setFontWeight('bold');
   const settings = ss.getSheetByName(SHEETS.SETTINGS);
   const rows = getRows_(SHEETS.SETTINGS);
   const version = rows.find(r => String(r.key).toLowerCase() === 'version');
@@ -1676,6 +1672,10 @@ function upgradeSystem310() {
     emailLog.appendRow(['Timestamp','SenderID','SenderName','SenderRole','RecipientCount','Status']);
     emailLog.getRange(1,1,1,6).setFontWeight('bold').setBackground('#123b5d').setFontColor('#ffffff');
   }
+  const usersSheet = ss.getSheetByName(SHEETS.USERS);
+  if (!usersSheet) throw new Error('Users sheet is missing. No migration was performed.');
+  const userHeaders = usersSheet.getRange(1,1,1,Math.max(1,usersSheet.getLastColumn())).getValues()[0].map(v => String(v).trim().toLowerCase());
+  if (userHeaders.indexOf('email') < 0) usersSheet.getRange(1,usersSheet.getLastColumn()+1).setValue('Email').setFontWeight('bold');
   const settings = ss.getSheetByName(SHEETS.SETTINGS);
   const rows = getRows_(SHEETS.SETTINGS);
   const version = rows.find(r => String(r.key).trim().toLowerCase() === 'version');
