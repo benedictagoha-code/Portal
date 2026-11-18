@@ -1582,6 +1582,12 @@ function sendPortalEmail(token, payload) {
    10. WEB APP ENTRY POINTS (BOTH DIRECT & GITHUB PAGES)
    ============================================================ */
 function doGet(e) {
+  if (e && e.parameter && e.parameter.bridge === '1') {
+    return HtmlService
+      .createHtmlOutputFromFile('Bridge')
+      .setTitle('psyc@UNIDEL API Bridge')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  }
   return HtmlService
     .createHtmlOutputFromFile('Index')
     .setTitle('psyc@UNIDEL 3.10 — Department of Psychology')
