@@ -1473,8 +1473,26 @@ function resolvePortalEmailRecipient_(identifier) {
   const student = students.find(x => normaliseMatric_(x.matricno) === normaliseMatric_(key));
   if (student) return validEmailAddress_(student.email) ? {email:String(student.email).trim(),name:[student.surname,student.firstname].filter(Boolean).join(' ') || key,registered:true} : null;
   const lecturer = lecturers.find(x => String(x.lecturerid || '').trim().toUpperCase() === key.toUpperCase() || String(x.staffid || '').trim().toUpperCase() === key.toUpperCase());
-  if (lecturer) return validEmailAddress_(lecturer.email) ? {email:String(lecturer.email).trim(),name:[lecturer.title,lecturer.surname,lecturer.firstname].filter(Boolean).join(' ') || key,registered:true} : null;
-  if (validEmailAddress_(key)) return {email:key,name:key,registered:false};
+  if (lecturer) {
+    const linked = users.find(x => String(x.userid || '').trim().toUpperCase() === String(lecturer.lecturerid || '').trim().toUpperCase() && String(x.active || '').toUpperCase() === 'YES');
+    return linked && validEmailAddress_(lecturer.email) ? {email:String(lecturer.email).trim(),name:[lecturer.title,lecturer.surname,lecturer.firstname].filter(Boolean).join(' ') || key,registered:true} : null;
+  }
+  if (validEmailAddress_(key)) {
+    const emailKey = key.toLowerCase();
+    const registeredUser = users.find(x => String(x.email || '').trim().toLowerCase() === emailKey && String(x.active || '').toUpperCase() === 'YES');
+    if (registeredUser) return {email:key,name:registeredUser.name || key,registered:true};
+    const registeredStudent = students.find(x => String(x.email || '').trim().toLowerCase() === emailKey);
+    if (registeredStudent) {
+      const linked = users.find(x => normaliseMatric_(x.userid) === normaliseMatric_(registeredStudent.matricno) && String(x.active || '').toUpperCase() === 'YES');
+      if (linked) return {email:key,name:[registeredStudent.surname,registeredStudent.firstname].filter(Boolean).join(' ') || key,registered:true};
+    }
+    const registeredLecturer = lecturers.find(x => String(x.email || '').trim().toLowerCase() === emailKey);
+    if (registeredLecturer) {
+      const linked = users.find(x => String(x.userid || '').trim().toUpperCase() === String(registeredLecturer.lecturerid || '').trim().toUpperCase() && String(x.active || '').toUpperCase() === 'YES');
+      if (linked) return {email:key,name:[registeredLecturer.title,registeredLecturer.surname,registeredLecturer.firstname].filter(Boolean).join(' ') || key,registered:true};
+    }
+    return {email:key,name:key,registered:false};
+  }
   return null;
 }
 
