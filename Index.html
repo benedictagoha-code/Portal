@@ -470,9 +470,7 @@
                 <div class="form-group">
                   <label>Question Type</label>
                   <select id="qType" onchange="toggleQFields()">
-                    <option value="MCQ">Multiple Choice (a-d)</option>
-                    <option value="TRUE_FALSE">True / False</option>
-                    <option value="FILL_GAP">Fill-in-the-Gap</option>
+                    <option value="MCQ">Multiple Choice (one correct)</option><option value="TRUE_FALSE">True / False</option><option value="FILL_GAP">Fill-in-the-Blank</option><option value="MATCHING">Matching Options (dropdown)</option><option value="MULTI_CORRECT">Select All Correct Options</option><option value="MULTI_INCORRECT">Select All Incorrect Options</option>
                   </select>
                 </div>
                 <div class="form-group full"><label>Question Text *</label><textarea id="qText" rows="2" required></textarea></div>
@@ -486,9 +484,9 @@
                 <div id="qTfWrap" class="full hidden">
                   <div class="form-group"><label>Correct Answer</label><select id="qAnsTf"><option value="TRUE">True</option><option value="FALSE">False</option></select></div>
                 </div>
-                <div id="qGapWrap" class="full hidden">
-                  <div class="form-group"><label>Accepted Answer(s) (separate with |)</label><input type="text" id="qAnsGap" placeholder="e.g. Pavlov|Ivan Pavlov"></div>
-                </div>
+                <div id="qGapWrap" class="full hidden"><div class="form-group"><label>Accepted answers (separate alternatives with |)</label><input type="text" id="qAnsGap" placeholder="e.g. Pavlov|Ivan Pavlov"></div></div>
+                <div id="qMatchWrap" class="full hidden"><div class="form-group"><label>Matching pairs (one per line: prompt =&gt; correct match)</label><textarea id="qMatching" rows="5" placeholder="Classical conditioning =&gt; Pavlov\nOperant conditioning =&gt; Skinner"></textarea></div></div>
+                <div id="qMultiWrap" class="full hidden"><div class="form-group"><label>Correct option keys (comma-separated, e.g. a,c)</label><input id="qMultiKeys" placeholder="a,c"><label>Marking</label><select id="qMultiMode"><option value="PARTIAL">Partial credit (penalty for incorrect selections)</option><option value="EXACT">All-or-nothing</option></select></div></div>
                 <div class="form-group"><label>Marks</label><input type="number" id="qMarks" value="1" min="1"></div>
                 <div class="full"><button type="submit" class="btn btn-primary">Save Question</button></div>
               </form>
@@ -500,7 +498,7 @@
             <p class="text-muted">Save questions for reuse. Private questions are visible only to their owner; shared questions are available to lecturers assigned to the course.</p>
             <form onsubmit="onSaveBankQuestion(event)" class="form-grid">
               <div class="form-group"><label>Course *</label><select id="bankCourse" required onchange="loadBankQuestions()"></select></div>
-              <div class="form-group"><label>Question Type</label><select id="bankType"><option value="MCQ">Multiple Choice</option><option value="TRUE_FALSE">True / False</option><option value="FILL_GAP">Fill-in-the-Gap</option></select></div>
+              <div class="form-group"><label>Question Type</label><select id="bankType"><option value="MCQ">Multiple Choice (one correct)</option><option value="TRUE_FALSE">True / False</option><option value="FILL_GAP">Fill-in-the-Blank</option><option value="MATCHING">Matching Options (dropdown)</option><option value="MULTI_CORRECT">Select All Correct Options</option><option value="MULTI_INCORRECT">Select All Incorrect Options</option></select></div>
               <div class="form-group"><label>Topic</label><input id="bankTopic" placeholder="e.g. Memory"></div>
               <div class="form-group"><label>Difficulty</label><select id="bankDifficulty"><option value="EASY">Easy</option><option value="MEDIUM" selected>Medium</option><option value="HARD">Hard</option></select></div>
               <div class="form-group"><label>Access</label><select id="bankSharing"><option value="PRIVATE">Private — only me</option><option value="SHARED">Shared with assigned course lecturers</option></select></div>
@@ -508,7 +506,9 @@
               <div class="form-group full"><label>Question *</label><textarea id="bankText" rows="2" required></textarea></div>
               <div class="form-group"><label>Option A</label><input id="bankA"></div><div class="form-group"><label>Option B</label><input id="bankB"></div>
               <div class="form-group"><label>Option C</label><input id="bankC"></div><div class="form-group"><label>Option D</label><input id="bankD"></div>
-              <div class="form-group"><label>Correct answer (a/b/c/d, TRUE/FALSE, or accepted text)</label><input id="bankAnswer" required></div>
+              <div class="form-group"><label id="bankAnswerLabel">Correct answer (a/b/c/d or TRUE/FALSE)</label><input id="bankAnswer" required></div>
+              <div class="form-group full hidden" id="bankMatchingWrap"><label>Matching pairs (one per line: prompt =&gt; correct match)</label><textarea id="bankMatching" rows="5" placeholder="Classical conditioning =&gt; Pavlov\nOperant conditioning =&gt; Skinner"></textarea></div>
+              <div class="form-group hidden" id="bankMultiWrap"><label>Correct option keys (comma-separated, e.g. a,c)</label><input id="bankMultiKeys" placeholder="a,c"><label>Marking</label><select id="bankMultiMode"><option value="PARTIAL">Partial credit (penalty for incorrect selections)</option><option value="EXACT">All-or-nothing</option></select></div>
               <div class="form-group"><label>Explanation / Marking note</label><input id="bankExplanation"></div>
               <div class="full"><button type="submit" class="btn btn-primary">Save to Test Bank</button></div>
             </form>
@@ -1378,11 +1378,24 @@
       finally { loading(false); }
     }
 
+    function parseMatchingPairsClient_(value) {
+      return String(value||'').split(/\\r?\\n/).map(line=>{const p=line.split('=>');return p.length>=2?{left:p[0].trim(),right:p.slice(1).join('=>').trim()}:null;}).filter(p=>p&&p.left&&p.right);
+    }
     function toggleQFields() {
-      const t = document.getElementById('qType').value;
-      document.getElementById('qMcqWrap').classList.toggle('hidden', t !== 'MCQ');
-      document.getElementById('qTfWrap').classList.toggle('hidden', t !== 'TRUE_FALSE');
-      document.getElementById('qGapWrap').classList.toggle('hidden', t !== 'FILL_GAP');
+      const t=document.getElementById('qType').value;
+      document.getElementById('qMcqWrap').classList.toggle('hidden',!['MCQ','MULTI_CORRECT','MULTI_INCORRECT'].includes(t));
+      document.getElementById('qTfWrap').classList.toggle('hidden',t!=='TRUE_FALSE');
+      document.getElementById('qGapWrap').classList.toggle('hidden',t!=='FILL_GAP');
+      document.getElementById('qMatchWrap').classList.toggle('hidden',t!=='MATCHING');
+      document.getElementById('qMultiWrap').classList.toggle('hidden',!['MULTI_CORRECT','MULTI_INCORRECT'].includes(t));
+    }
+    function toggleBankQuestionFields() {
+      const t=document.getElementById('bankType').value;
+      document.getElementById('bankMatchingWrap').classList.toggle('hidden',t!=='MATCHING');
+      document.getElementById('bankMultiWrap').classList.toggle('hidden',!['MULTI_CORRECT','MULTI_INCORRECT'].includes(t));
+      const label=document.getElementById('bankAnswerLabel');
+      label.textContent=t==='FILL_GAP'?'Accepted answers (separate with |)':t==='TRUE_FALSE'?'Correct answer (TRUE or FALSE)':'Correct option key (a/b/c/d)';
+      document.getElementById('bankAnswer').required=t!=='MATCHING'&&t!=='MULTI_CORRECT'&&t!=='MULTI_INCORRECT';
     }
 
     async function onCreateTest(e) {
@@ -1487,7 +1500,10 @@
         topic:document.getElementById('bankTopic').value,difficulty:document.getElementById('bankDifficulty').value,
         sharing:document.getElementById('bankSharing').value,questionText:document.getElementById('bankText').value,
         optionA:document.getElementById('bankA').value,optionB:document.getElementById('bankB').value,optionC:document.getElementById('bankC').value,optionD:document.getElementById('bankD').value,
-        correctAnswer:document.getElementById('bankAnswer').value,marks:document.getElementById('bankMarks').value,explanation:document.getElementById('bankExplanation').value};
+        correctAnswer:document.getElementById('bankAnswer').value,acceptedAnswers:document.getElementById('bankType').value==='FILL_GAP'?document.getElementById('bankAnswer').value.split('|').map(x=>x.trim()).filter(Boolean):[],
+        matchingPairs:document.getElementById('bankType').value==='MATCHING'?parseMatchingPairsClient_(document.getElementById('bankMatching').value):[],
+        correctKeys:['MULTI_CORRECT','MULTI_INCORRECT'].includes(document.getElementById('bankType').value)?document.getElementById('bankMultiKeys').value.split(',').map(x=>x.trim().toLowerCase()).filter(Boolean):[],
+        markingMode:document.getElementById('bankMultiMode').value,marks:document.getElementById('bankMarks').value,explanation:document.getElementById('bankExplanation').value};
       loading(true,'Saving to Test Bank...');
       try { const res=bankEditingId ? await api('updateBankQuestion',token,bankEditingId,payload) : await api('saveBankQuestion',token,payload); alertMsg('appAlert',res.message,res.success?'success':'error'); if(res.success){bankEditingId=null;e.target.reset();await loadBankQuestions();} }
       catch(err){alertMsg('appAlert',err.message,'error');} finally{loading(false);}
@@ -1498,13 +1514,18 @@
       if(user.role!=='Administrator'&&String(q.ownerid).toUpperCase()!==String(user.userID).toUpperCase()){alertMsg('appAlert','Only the question owner can edit it.','error');return;}
       bankEditingId=id;
       document.getElementById('bankType').value=q.questiontype||'MCQ';
+      const ad=(()=>{try{return JSON.parse(q.answerdatajson||'{}')}catch(e){return {}}})();
       document.getElementById('bankTopic').value=q.topic||'';
       document.getElementById('bankDifficulty').value=q.difficulty||'MEDIUM';
       document.getElementById('bankSharing').value=q.sharing||'PRIVATE';
       document.getElementById('bankText').value=q.questiontext||'';
       document.getElementById('bankA').value=q.optiona||'';document.getElementById('bankB').value=q.optionb||'';
       document.getElementById('bankC').value=q.optionc||'';document.getElementById('bankD').value=q.optiond||'';
-      document.getElementById('bankAnswer').value=q.correctanswer||'';
+      document.getElementById('bankAnswer').value=q.correctanswer||((ad.acceptedAnswers||[]).join('|'));
+      document.getElementById('bankMatching').value=(ad.matchingPairs||[]).map(p=>p.left+' => '+p.right).join('\\n');
+      document.getElementById('bankMultiKeys').value=(ad.correctKeys||[]).join(',');
+      document.getElementById('bankMultiMode').value=ad.markingMode||'PARTIAL';
+      toggleBankQuestionFields();
       document.getElementById('bankMarks').value=q.marks||1;
       document.getElementById('bankExplanation').value=q.explanation||'';
       alertMsg('appAlert','Editing saved question '+id+'. Save the form to update it.','success');
@@ -1527,7 +1548,7 @@
     async function onAddQuestion(e) {
       e.preventDefault();
       const t = document.getElementById('qType').value;
-      const ans = t === 'MCQ' ? document.getElementById('qAnsMcq').value : t === 'TRUE_FALSE' ? document.getElementById('qAnsTf').value : document.getElementById('qAnsGap').value;
+      const ans=t==='MCQ'?document.getElementById('qAnsMcq').value:t==='TRUE_FALSE'?document.getElementById('qAnsTf').value:t==='FILL_GAP'?document.getElementById('qAnsGap').value:'';
       loading(true, 'Saving question...');
       try {
         const res = await api('addQuestion', token, {
@@ -1539,6 +1560,10 @@
           optionC: document.getElementById('qC').value,
           optionD: document.getElementById('qD').value,
           correctAnswer: ans,
+          acceptedAnswers: t==='FILL_GAP'?ans.split('|').map(x=>x.trim()).filter(Boolean):[],
+          matchingPairs: t==='MATCHING'?parseMatchingPairsClient_(document.getElementById('qMatching').value):[],
+          correctKeys: ['MULTI_CORRECT','MULTI_INCORRECT'].includes(t)?document.getElementById('qMultiKeys').value.split(',').map(x=>x.trim().toLowerCase()).filter(Boolean):[],
+          markingMode: document.getElementById('qMultiMode').value,
           marks: document.getElementById('qMarks').value
         });
         alertMsg('appAlert', res.message, res.success ? 'success' : 'error');
@@ -1551,19 +1576,19 @@
       try {
         const res = await api('getQuestionsForTest', token, testID);
         if (!res.success || !res.questions.length) { alertMsg('appAlert', res.message || 'No questions added yet.'); return; }
-        cbtState = { testID: testID, questions: res.questions, timer: null };
-        document.getElementById('cbtTitle').textContent = res.test.title;
-        document.getElementById('cbtBody').innerHTML = res.questions.map((q, i) => {
-          let inp = '';
-          if (q.questionType === 'TRUE_FALSE') {
-            inp = ['TRUE', 'FALSE'].map(v => `<label class="opt-row"><input type="radio" name="q_${esc(q.questionID)}" value="${v}"><span>${v}</span></label>`).join('');
-          } else if (q.questionType === 'FILL_GAP') {
-            inp = `<input type="text" id="gap_${esc(q.questionID)}" class="mt-1" placeholder="Type answer...">`;
-          } else {
-            const ordered = q.optionOrder && q.optionOrder.length ? q.optionOrder : ['A','B','C','D'].filter(o=>q['option'+o]).map(o=>({key:o.toLowerCase(),label:q['option'+o]}));
-            inp = ordered.map(o => `<label class="opt-row"><input type="radio" name="q_${esc(q.questionID)}" value="${esc(o.key)}"><span>${esc(o.label)}</span></label>`).join('');
+        cbtState={testID:testID,questions:res.questions,timer:null};
+        document.getElementById('cbtTitle').textContent=res.test.title;
+        document.getElementById('cbtBody').innerHTML=res.questions.map((q,i)=>{
+          let inp='',type=q.questionType;
+          if(type==='TRUE_FALSE')inp=['TRUE','FALSE'].map(v=>`<label class="opt-row"><input type="radio" name="q_${esc(q.questionID)}" value="${v}"><span>${v}</span></label>`).join('');
+          else if(type==='FILL_GAP')inp=`<input type="text" id="gap_${esc(q.questionID)}" class="mt-1" placeholder="Type answer...">`;
+          else if(type==='MATCHING')inp=(q.matchingPrompts||[]).map((p,j)=>`<div class="form-group mt-1"><label>${esc(p)}</label><select class="match-answer" data-qid="${esc(q.questionID)}" data-index="${j}"><option value="">Choose a match</option>${(q.matchingChoices||[]).map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('')}</select></div>`).join('');
+          else {
+            const ordered=q.optionOrder&&q.optionOrder.length?q.optionOrder:['A','B','C','D'].filter(o=>q['option'+o]).map(o=>({key:o.toLowerCase(),label:q['option'+o]}));
+            const multi=type==='MULTI_CORRECT'||type==='MULTI_INCORRECT';
+            inp=ordered.map(o=>`<label class="opt-row"><input type="${multi?'checkbox':'radio'}" name="q_${esc(q.questionID)}" value="${esc(o.key)}"><span>${esc(o.label)}</span></label>`).join('');
           }
-          return `<div class="q-box"><strong>Q${i + 1}. ${esc(q.questionText)}</strong> (${q.marks} mk)${inp}</div>`;
+          return `<div class="q-box"><strong>Q${i+1}. ${esc(q.questionText)}</strong> (${q.marks} mk)${inp}</div>`;
         }).join('');
         document.getElementById('cbtModal').classList.remove('hidden');
 
@@ -1591,13 +1616,11 @@
     async function submitCBT() {
       if (cbtState.timer) clearInterval(cbtState.timer);
       const answers = {};
-      cbtState.questions.forEach(q => {
-        if (q.questionType === 'FILL_GAP') {
-          answers[q.questionID] = (document.getElementById('gap_' + q.questionID) || {}).value || '';
-        } else {
-          const chk = document.querySelector(`input[name="q_${q.questionID}"]:checked`);
-          if (chk) answers[q.questionID] = chk.value;
-        }
+      cbtState.questions.forEach(q=>{
+        if(q.questionType==='FILL_GAP')answers[q.questionID]=(document.getElementById('gap_'+q.questionID)||{}).value||'';
+        else if(q.questionType==='MATCHING'){const m={};document.querySelectorAll('.match-answer[data-qid="'+q.questionID+'"]').forEach(el=>{if(el.value)m[el.dataset.index]=el.value;});answers[q.questionID]=m;}
+        else if(q.questionType==='MULTI_CORRECT'||q.questionType==='MULTI_INCORRECT'){answers[q.questionID]=Array.from(document.querySelectorAll('input[name="q_'+q.questionID+'"]:checked')).map(el=>el.value);}
+        else{const chk=document.querySelector('input[name="q_'+q.questionID+'"]:checked');if(chk)answers[q.questionID]=chk.value;}
       });
       document.getElementById('cbtModal').classList.add('hidden');
       loading(true, 'Submitting & evaluating...');
