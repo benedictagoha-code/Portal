@@ -1094,7 +1094,11 @@ function submitCBTAttempt(token, testID, answers) {
       else if(typ==='MATCHING'){const response=raw&&typeof raw==='object'?raw:{},pairs=ad.matchingPairs||[];let matched=0;pairs.forEach((p,i)=>{if(normaliseAnswerText_(response[String(i)])===normaliseAnswerText_(p.right))matched++;});earned=pairs.length?mk*matched/pairs.length:0;isCorrect=pairs.length>0&&matched===pairs.length;givenRaw=Object.keys(response).map(k=>(Number(k)+1)+': '+response[k]).join('; ')||'(No Answer)';}
       else if(typ==='MULTI_CORRECT'||typ==='MULTI_INCORRECT'){const selected=Array.isArray(raw)?raw.map(x=>String(x).toLowerCase()):[],correct=(ad.correctKeys||String(q.correctanswer||'').split(',')).map(x=>String(x).toLowerCase()),chosen=new Set(selected),target=new Set(correct),hits=correct.filter(x=>chosen.has(x)).length,extras=selected.filter(x=>!target.has(x)).length;isCorrect=chosen.size===target.size&&hits===target.size;earned=isCorrect?mk:(ad.markingMode==='EXACT'?0:Math.max(0,mk*(hits-extras)/Math.max(1,target.size)));givenRaw=selected.join(', ')||'(No Answer)';}
       else{givenRaw=String(raw==null?'':raw).trim();isCorrect=!!givenRaw&&givenRaw.toLowerCase()===String(q.correctanswer||'').trim().toLowerCase();earned=isCorrect?mk:0;}
-      rawScore+=earned;reviewItems.push({number:idx+1,questionText:q.questiontext,yourAnswer:givenRaw||'(No Answer)',correctAnswer:q.correctanswer||'',isCorrect:isCorrect,earned:Number(earned.toFixed(2)),maxMarks:mk});
+      let keyDisplay=q.correctanswer||'';
+      if(typ==='FILL_GAP')keyDisplay=(ad.acceptedAnswers||String(q.correctanswer||'').split('|')).join(' / ');
+      else if(typ==='MATCHING')keyDisplay=(ad.matchingPairs||[]).map(p=>p.left+' => '+p.right).join('; ');
+      else if(typ==='MULTI_CORRECT'||typ==='MULTI_INCORRECT')keyDisplay=(ad.correctKeys||[]).map(k=>k.toUpperCase()+'. '+String(q['option'+k.toUpperCase()]||'')).join('; ');
+      rawScore+=earned;reviewItems.push({number:idx+1,questionText:q.questiontext,yourAnswer:givenRaw||'(No Answer)',correctAnswer:keyDisplay,isCorrect:isCorrect,earned:Number(earned.toFixed(2)),maxMarks:mk});
     });
     const maxScore = Number(test.totalmarks || rawMax);
     const scaledScore = rawMax > 0 ? Number(((rawScore / rawMax) * maxScore).toFixed(2)) : 0;
