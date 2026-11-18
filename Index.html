@@ -498,7 +498,7 @@
             <p class="text-muted">Save questions for reuse. Private questions are visible only to their owner; shared questions are available to lecturers assigned to the course.</p>
             <form onsubmit="onSaveBankQuestion(event)" class="form-grid">
               <div class="form-group"><label>Course *</label><select id="bankCourse" required onchange="loadBankQuestions()"></select></div>
-              <div class="form-group"><label>Question Type</label><select id="bankType"><option value="MCQ">Multiple Choice (one correct)</option><option value="TRUE_FALSE">True / False</option><option value="FILL_GAP">Fill-in-the-Blank</option><option value="MATCHING">Matching Options (dropdown)</option><option value="MULTI_CORRECT">Select All Correct Options</option><option value="MULTI_INCORRECT">Select All Incorrect Options</option></select></div>
+              <div class="form-group"><label>Question Type</label><select id="bankType" onchange="toggleBankQuestionFields()"><option value="MCQ">Multiple Choice (one correct)</option><option value="TRUE_FALSE">True / False</option><option value="FILL_GAP">Fill-in-the-Blank</option><option value="MATCHING">Matching Options (dropdown)</option><option value="MULTI_CORRECT">Select All Correct Options</option><option value="MULTI_INCORRECT">Select All Incorrect Options</option></select></div>
               <div class="form-group"><label>Topic</label><input id="bankTopic" placeholder="e.g. Memory"></div>
               <div class="form-group"><label>Difficulty</label><select id="bankDifficulty"><option value="EASY">Easy</option><option value="MEDIUM" selected>Medium</option><option value="HARD">Hard</option></select></div>
               <div class="form-group"><label>Access</label><select id="bankSharing"><option value="PRIVATE">Private — only me</option><option value="SHARED">Shared with assigned course lecturers</option></select></div>
@@ -1379,7 +1379,7 @@
     }
 
     function parseMatchingPairsClient_(value) {
-      return String(value||'').split(/\\r?\\n/).map(line=>{const p=line.split('=>');return p.length>=2?{left:p[0].trim(),right:p.slice(1).join('=>').trim()}:null;}).filter(p=>p&&p.left&&p.right);
+      return String(value||'').split(/\r?\n/).map(line=>{const p=line.split('=>');return p.length>=2?{left:p[0].trim(),right:p.slice(1).join('=>').trim()}:null;}).filter(p=>p&&p.left&&p.right);
     }
     function toggleQFields() {
       const t=document.getElementById('qType').value;
@@ -1525,6 +1525,7 @@
       document.getElementById('bankMatching').value=(ad.matchingPairs||[]).map(p=>p.left+' => '+p.right).join('\\n');
       document.getElementById('bankMultiKeys').value=(ad.correctKeys||[]).join(',');
       document.getElementById('bankMultiMode').value=ad.markingMode||'PARTIAL';
+      document.getElementById('bankMultiWrap').querySelector('label').textContent=q.questiontype==='MULTI_INCORRECT'?'Option keys that are incorrect (comma-separated, e.g. a,c)':'Correct option keys (comma-separated, e.g. a,c)';
       toggleBankQuestionFields();
       document.getElementById('bankMarks').value=q.marks||1;
       document.getElementById('bankExplanation').value=q.explanation||'';
