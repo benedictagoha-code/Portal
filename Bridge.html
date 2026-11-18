@@ -44,7 +44,7 @@
             error: err && err.message ? err.message : 'Apps Script request failed.'
           }, event.origin);
         });
-      runner[msg.fn].apply(runner, msg.args);
+      runner[msg.fn](...msg.args);
     } catch (err) {
       event.source.postMessage({
         type:'PSYC_API_RESULT', id:msg.id, ok:false,
