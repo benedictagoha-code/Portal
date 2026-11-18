@@ -1438,6 +1438,113 @@ function toggleUserStatus(token, targetUserID, newStatus) {
   return { success: true, message: 'Updated status for ' + targetUserID + ' to ' + newStatus };
 }
 
+
+/* ============================================================
+   VERSION 3.10 — EMAIL MESSAGING (NO MESSAGE-BODY STORAGE)
+   ============================================================ */
+function validEmailAddress_(value) {
+  const s = String(value || '').trim();
+  return /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(s);
+}
+
+function resolvePortalEmailRecipient_(identifier) {
+  const key = String(identifier || '').trim();
+  if (!key) return null;
+  const users = getRows_(SHEETS.USERS);
+  const students = getRows_(SHEETS.STUDENTS);
+  const lecturers = getRows_(SHEETS.LECTURERS);
+  const user = users.find(x => String(x.userid || '').trim().toUpperCase() === key.toUpperCase());
+  if (user) {
+    const student = students.find(x => normaliseMatric_(x.matricno) === normaliseMatric_(user.userid));
+    const lecturer = lecturers.find(x => String(x.lecturerid || '').trim().toUpperCase() === key.toUpperCase());
+    const email = String(user.email || student && student.email || lecturer && lecturer.email || '').trim();
+    return email ? { email: email, name: user.name || key, registered: true } : null;
+  }
+  const student = students.find(x => normaliseMatric_(x.matricno) === normaliseMatric_(key));
+  if (student) return validEmailAddress_(student.email) ? {email:String(student.email).trim(),name:[student.surname,student.firstname].filter(Boolean).join(' ') || key,registered:true} : null;
+  const lecturer = lecturers.find(x => String(x.lecturerid || '').trim().toUpperCase() === key.toUpperCase() || String(x.staffid || '').trim().toUpperCase() === key.toUpperCase());
+  if (lecturer) return validEmailAddress_(lecturer.email) ? {email:String(lecturer.email).trim(),name:[lecturer.title,lecturer.surname,lecturer.firstname].filter(Boolean).join(' ') || key,registered:true} : null;
+  if (validEmailAddress_(key)) return {email:key,name:key,registered:false};
+  return null;
+}
+
+function getMessagingSettings(token) {
+  const user = requireUser_(token);
+  return {
+    success:true,
+    allowExternalRecipients:String(getSetting_('AllowExternalEmailRecipients','YES')).trim().toUpperCase() !== 'NO',
+    isAdministrator:user.role === 'Administrator'
+  };
+}
+
+function setAllowExternalEmailRecipients(token, enabled) {
+  requireUser_(token, ['Administrator']);
+  const value = enabled ? 'YES' : 'NO';
+  const ss = getDB_(), sh = ss.getSheetByName(SHEETS.SETTINGS), rows = getRows_(SHEETS.SETTINGS);
+  const row = rows.find(r => String(r.key).trim().toLowerCase() === 'allowexternalemailrecipients');
+  if (row) sh.getRange(row._row,2).setValue(value);
+  else sh.appendRow(['AllowExternalEmailRecipients',value]);
+  return {success:true,allowExternalRecipients:enabled,message:'External email recipients are now '+(enabled?'allowed.':'disabled.')};
+}
+
+function logEmailDelivery_(user, recipientCount, status) {
+  const sh = getDB_().getSheetByName('EmailLog');
+  if (sh) sh.appendRow([new Date().toISOString(),String(user.userID),String(user.name),String(user.role),Number(recipientCount || 0),String(status)]);
+}
+
+function sendPortalEmail(token, payload) {
+  const user = requireUser_(token);
+  payload = payload || {};
+  const subject = String(payload.subject || '').trim();
+  const body = String(payload.body || '').trim();
+  const rawRecipients = String(payload.recipients || '').split(/[;,\\n]+/).map(x => x.trim()).filter(Boolean);
+  if (!subject || subject.length > 200) return {success:false,message:'Enter a subject of no more than 200 characters.'};
+  if (!body || body.length > 10000) return {success:false,message:'Enter a message of no more than 10,000 characters.'};
+  if (!rawRecipients.length) return {success:false,message:'Enter at least one recipient.'};
+  if (rawRecipients.length > 10) return {success:false,message:'A maximum of 10 recipients is allowed per message.'};
+
+  const allowExternal = String(getSetting_('AllowExternalEmailRecipients','YES')).trim().toUpperCase() !== 'NO';
+  const recipients = [], seen = new Set();
+  for (const item of rawRecipients) {
+    const resolved = resolvePortalEmailRecipient_(item);
+    if (!resolved) return {success:false,message:'Recipient not found or has no valid registered email: '+item};
+    if (!resolved.registered && !allowExternal) return {success:false,message:'External email recipients have been disabled by the administrator.'};
+    const emailKey = resolved.email.toLowerCase();
+    if (!seen.has(emailKey)) { seen.add(emailKey); recipients.push(resolved); }
+  }
+  if (!recipients.length) return {success:false,message:'No valid unique recipients were supplied.'};
+
+  const dateKey = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'Africa/Lagos', 'yyyyMMdd');
+  const propKey = 'PSYC_MAIL_DAILY_' + String(user.userID).replace(/[^A-Za-z0-9_-]/g,'_') + '_' + dateKey;
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const sentToday = Number(props.getProperty(propKey) || 0);
+    if (sentToday >= 20) return {success:false,message:'Daily sending limit reached (20 messages per user). Try again tomorrow.'};
+    const senderEmail = (getRows_(SHEETS.USERS).find(x => String(x.userid).toUpperCase() === String(user.userID).toUpperCase()) || {}).email ||
+      (getRows_(SHEETS.STUDENTS).find(x => normaliseMatric_(x.matricno) === normaliseMatric_(user.userID)) || {}).email ||
+      (getRows_(SHEETS.LECTURERS).find(x => String(x.lecturerid).toUpperCase() === String(user.userID).toUpperCase()) || {}).email || '';
+    const options = {name:String(user.name || 'psyc@UNIDEL')+' — psyc@UNIDEL'};
+    if (validEmailAddress_(senderEmail)) options.replyTo = String(senderEmail).trim();
+    let sent = 0;
+    try {
+      recipients.forEach(recipient => {
+        MailApp.sendEmail({to:recipient.email,subject:subject,body:body,name:options.name,replyTo:options.replyTo});
+        sent++;
+      });
+      props.setProperty(propKey,String(sentToday + 1));
+      logEmailDelivery_(user, recipients.length, 'SENT');
+      return {success:true,message:'Email sent successfully to '+sent+' recipient(s). Message content was not stored in the portal.',sent:sent};
+    } catch (err) {
+      logEmailDelivery_(user, sent, 'PARTIAL_OR_FAILED');
+      return {success:false,message:'Email delivery stopped after '+sent+' recipient(s): '+err.message};
+    }
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 /* ============================================================
    10. WEB APP ENTRY POINTS (BOTH DIRECT & GITHUB PAGES)
    ============================================================ */
@@ -1491,7 +1598,12 @@ function doPost(e) {
       replyDiscussionTopic: replyDiscussionTopic,
       getDiscussions: getDiscussions,
       getAdminOverview: getAdminOverview,
-      toggleUserStatus: toggleUserStatus
+      toggleUserStatus: toggleUserStatus,
+      getGradeReport: getGradeReport,
+      exportGradeReportToExcel: exportGradeReportToExcel,
+      getMessagingSettings: getMessagingSettings,
+      setAllowExternalEmailRecipients: setAllowExternalEmailRecipients,
+      sendPortalEmail: sendPortalEmail
     };
 
     if (!Object.prototype.hasOwnProperty.call(ROUTES, fn)) {
@@ -1539,10 +1651,18 @@ function upgradeSystem310() {
       sh.getRange(1,sh.getLastColumn()+1).setValue(name).setFontWeight('bold');
     }
   });
+  let emailLog = ss.getSheetByName('EmailLog');
+  if (!emailLog) {
+    emailLog = ss.insertSheet('EmailLog');
+    emailLog.appendRow(['Timestamp','SenderID','SenderName','SenderRole','RecipientCount','Status']);
+    emailLog.getRange(1,1,1,6).setFontWeight('bold').setBackground('#123b5d').setFontColor('#ffffff');
+  }
   const settings = ss.getSheetByName(SHEETS.SETTINGS);
   const rows = getRows_(SHEETS.SETTINGS);
   const version = rows.find(r => String(r.key).trim().toLowerCase() === 'version');
   if (version) settings.getRange(version._row,2).setValue('3.10');
   else settings.appendRow(['Version','3.10']);
-  return {success:true,version:'3.10',message:'Version 3.10 grade-report columns are ready. Existing result records were preserved; historical records without session/semester remain unassigned.'};
+  const external = rows.find(r => String(r.key).trim().toLowerCase() === 'allowexternalemailrecipients');
+  if (!external) settings.appendRow(['AllowExternalEmailRecipients','YES']);
+  return {success:true,version:'3.10',message:'Version 3.10 schema is ready. Grade-report columns and minimal EmailLog were added; existing result records and message privacy are preserved.'};
 }
