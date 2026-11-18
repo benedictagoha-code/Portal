@@ -288,6 +288,48 @@
           </div>
         </section>
 
+        <!-- VERSION 11: INTERACTIVE VIRTUAL CLASSROOM -->
+        <section id="vClassroom" class="view hidden">
+          <div class="card">
+            <div class="card-title">Interactive Virtual Classroom</div>
+            <p class="text-muted mb-2">Start a live course lecture or join a classroom opened by your lecturer. Use headphones where possible for clearer audio.</p>
+            <div id="classroomStaffControls" class="hidden">
+              <form onsubmit="onStartClassroom(event)" class="form-grid">
+                <div class="form-group"><label>Course *</label><select id="classCourse" required></select></div>
+                <div class="form-group"><label>Lecture title / topic *</label><input id="classTitle" type="text" maxlength="160" placeholder="e.g. Introduction to Clinical Psychology" required></div>
+                <div class="form-group full">
+                  <label>Student participation mode *</label>
+                  <select id="classParticipation" onchange="onClassParticipationPreview()">
+                    <option value="VIEW_ONLY">View Only — students watch and listen</option>
+                    <option value="AUDIO_PARTICIPATION">Audio Participation — students speak when permitted</option>
+                    <option value="VIDEO_AUDIO">Video and Audio Participation — camera and microphone available</option>
+                    <option value="RAISE_HAND" selected>Raise Hand to Participate — lecturer grants permission</option>
+                    <option value="OPEN_INTERACTIVE">Open Interactive Classroom — open audio, video and chat</option>
+                  </select>
+                </div>
+                <div class="full"><button class="btn btn-primary" type="submit">Start Live Lecture</button></div>
+              </form>
+              <p class="text-muted mt-1" id="classParticipationHelp">Students request permission before speaking or enabling cameras.</p>
+            </div>
+            <div class="flex-between mt-2 mb-2">
+              <h3 style="margin:0;color:var(--primary);font-size:1rem;">Live and Recent Classrooms</h3>
+              <button type="button" class="btn btn-outline btn-sm" onclick="refreshView()">Refresh</button>
+            </div>
+            <div id="classroomList"><p class="text-muted">Loading classrooms...</p></div>
+          </div>
+          <div class="card hidden" id="classroomMeetingCard">
+            <div class="flex-between mb-2">
+              <div>
+                <div class="card-title" id="classroomMeetingTitle">Live lecture</div>
+                <p class="text-muted" id="classroomMeetingMeta"></p>
+              </div>
+              <button type="button" class="btn btn-danger btn-sm" onclick="onLeaveClassroom()">Leave Classroom</button>
+            </div>
+            <div id="jitsiClassroomFrame" style="width:100%;min-height:560px;border-radius:10px;overflow:hidden;background:#111827;"></div>
+            <p class="text-muted mt-1">Classroom audio/video is provided by the meeting service. Follow your lecturer's participation instructions.</p>
+          </div>
+        </section>
+
         <!-- 2. COURSES & SELF-ENROLMENT -->
         <section id="vCourses" class="view hidden">
           <div id="adminCourseBox" class="card hidden">
@@ -705,6 +747,9 @@
   <script>
     const TOKEN_KEY = 'PSYC_V3_TOKEN';
     const API_EXEC_URL = 'https://script.google.com/macros/s/AKfycbx-nPf9cs_SWB4VUahGQ2A4FMqPbQPFSEj4PbIL9D0cCa0lAUfwCIJS5TtAhlZfFmE9rg/exec';
+    let activeClassroom = null;
+    let classroomJoinEventID = null;
+    let jitsiClassroomApi = null;
 
     const MODE_LABELS = {
       HIGHEST: 'Best (Highest)',
@@ -934,10 +979,12 @@
       document.getElementById('gradeReportCard').classList.toggle('hidden', !isStaff);
       document.getElementById('externalEmailSetting').classList.toggle('hidden', !isAdmin);
       document.getElementById('staffNoticeBox').classList.toggle('hidden', !isStaff);
+      document.getElementById('classroomStaffControls').classList.toggle('hidden', !isStaff);
 
       const links = [
         ['vDash', 'Dashboard'],
         ['vEmail', 'Email Messaging'],
+        ['vClassroom', 'Live Classroom'],
         ['vCourses', 'Courses & Enrolment'],
         ['vMaterials', 'Courseware'],
         ['vAttendance', 'Attendance & Eligibility'],
@@ -975,6 +1022,8 @@
         const opts = '<option value="">-- Select Course --</option>' + myCourses.map(c =>
           `<option value="${esc(c.courseid)}">${esc(c.coursecode)} - ${esc(c.coursetitle)}</option>`
         ).join('');
+        const classCourseEl = document.getElementById('classCourse');
+        if (classCourseEl) classCourseEl.innerHTML = opts;
         ['mCourse', 'aCourse', 'aSummaryCourse', 'aUploadCourse', 'tCourse', 'rCourse'].forEach(id => {
           const el = document.getElementById(id);
           if (el) el.innerHTML = opts;
@@ -1005,6 +1054,11 @@
           } else {
             document.getElementById('adminMetrics').classList.add('hidden');
           }
+        }
+
+        if (currentView === 'vClassroom') {
+          const classroomRes = await api('getClassrooms', token, '');
+          renderClassroomList(classroomRes.classrooms || []);
         }
 
         if (currentView === 'vCourses') {
@@ -1794,6 +1848,178 @@
         }
         await refreshView();
       } finally { loading(false); }
+    }
+
+
+    const CLASSROOM_MODE_LABELS = {
+      VIEW_ONLY: 'View Only',
+      AUDIO_PARTICIPATION: 'Audio Participation',
+      VIDEO_AUDIO: 'Video and Audio Participation',
+      RAISE_HAND: 'Raise Hand to Participate',
+      OPEN_INTERACTIVE: 'Open Interactive Classroom'
+    };
+
+    function onClassParticipationPreview() {
+      const mode = document.getElementById('classParticipation').value;
+      const help = {
+        VIEW_ONLY: 'Students watch and listen. Lecturer controls any exceptions.',
+        AUDIO_PARTICIPATION: 'Students may speak when the lecturer permits them.',
+        VIDEO_AUDIO: 'Students may use camera and microphone, subject to classroom controls.',
+        RAISE_HAND: 'Students request permission before speaking or enabling cameras.',
+        OPEN_INTERACTIVE: 'An open interactive session for audio, video and chat.'
+      };
+      document.getElementById('classParticipationHelp').textContent = help[mode] || '';
+    }
+
+    function renderClassroomList(items) {
+      const box = document.getElementById('classroomList');
+      if (!items.length) {
+        box.innerHTML = '<p class="text-muted">There are no live or previous classrooms available for your courses.</p>';
+        return;
+      }
+      box.innerHTML = items.map(c => {
+        const live = String(c.status).toUpperCase() === 'LIVE';
+        const safeId = esc(c.sessionID);
+        const action = live
+          ? '<button type="button" class="btn btn-primary btn-sm" onclick="onJoinClassroom(\'' + safeId + '\')">Join Classroom</button>'
+          : '<span class="badge b-slate">Ended</span>';
+        const control = live && user.role !== 'Student'
+          ? '<div class="form-group mt-1" style="max-width:330px;"><label>Change participation mode</label><select onchange="onUpdateClassroomMode(\'' + safeId + '\',this.value)">' +
+            Object.keys(CLASSROOM_MODE_LABELS).map(k => '<option value="' + k + '"' + (k === c.participationMode ? ' selected' : '') + '>' + CLASSROOM_MODE_LABELS[k] + '</option>').join('') +
+            '</select><button type="button" class="btn btn-outline btn-sm mt-1" onclick="onEndClassroom(\'' + safeId + '\')">End Lecture</button></div>'
+          : '';
+        return '<div class="card" style="margin-bottom:0.75rem;"><div class="flex-between"><div><strong>' +
+          esc(c.courseCode) + ' — ' + esc(c.courseTitle) + '</strong><div>' + esc(c.title) +
+          '</div><div class="text-muted">Lecturer: ' + esc(c.lecturerName) + ' · ' +
+          esc(CLASSROOM_MODE_LABELS[c.participationMode] || c.participationMode) + '</div></div><div>' +
+          (live ? '<span class="badge b-green">LIVE</span>' : '<span class="badge b-slate">ENDED</span>') +
+          '<div class="mt-1">' + action + '</div></div></div>' + control + '</div>';
+      }).join('');
+    }
+
+    async function onStartClassroom(e) {
+      e.preventDefault();
+      loading(true, 'Opening virtual classroom...');
+      try {
+        const res = await api('startClassroom', token, {
+          courseID: document.getElementById('classCourse').value,
+          title: document.getElementById('classTitle').value.trim(),
+          participationMode: document.getElementById('classParticipation').value
+        });
+        if (!res.success) throw new Error(res.message || 'Could not start classroom.');
+        alertMsg('appAlert', res.message, 'success');
+        await refreshView();
+        await onJoinClassroom(res.sessionID);
+      } catch (err) {
+        alertMsg('appAlert', err.message, 'error');
+      } finally { loading(false); }
+    }
+
+    async function onJoinClassroom(sessionID) {
+      loading(true, 'Joining virtual classroom...');
+      try {
+        const joined = await api('joinClassroom', token, sessionID);
+        if (!joined.success) throw new Error(joined.message || 'Unable to join classroom.');
+        activeClassroom = joined;
+        classroomJoinEventID = joined.eventID;
+        document.getElementById('classroomMeetingTitle').textContent = joined.courseCode + ' — ' + joined.title;
+        document.getElementById('classroomMeetingMeta').textContent =
+          'Lecturer: ' + joined.lecturerName + ' · Participation: ' +
+          (CLASSROOM_MODE_LABELS[joined.participationMode] || joined.participationMode);
+        document.getElementById('classroomMeetingCard').classList.remove('hidden');
+        await loadJitsiClassroom(joined);
+        document.getElementById('classroomMeetingCard').scrollIntoView({behavior:'smooth',block:'start'});
+      } catch (err) {
+        alertMsg('appAlert', err.message, 'error');
+      } finally { loading(false); }
+    }
+
+    function loadJitsiClassroom(joined) {
+      return new Promise((resolve, reject) => {
+        const launch = () => {
+          try {
+            const mode = joined.participationMode;
+            const audioMuted = mode === 'VIEW_ONLY' || mode === 'RAISE_HAND';
+            const videoMuted = mode === 'VIEW_ONLY' || mode === 'AUDIO_PARTICIPATION' || mode === 'RAISE_HAND';
+            document.getElementById('jitsiClassroomFrame').innerHTML = '';
+            jitsiClassroomApi = new JitsiMeetExternalAPI('meet.jit.si', {
+              roomName: joined.roomName,
+              parentNode: document.getElementById('jitsiClassroomFrame'),
+              width: '100%',
+              height: 560,
+              userInfo: {displayName: joined.displayName},
+              configOverwrite: {
+                prejoinPageEnabled: false,
+                startWithAudioMuted: audioMuted,
+                startWithVideoMuted: videoMuted,
+                disableDeepLinking: true
+              },
+              interfaceConfigOverwrite: {
+                MOBILE_APP_PROMO: false,
+                SHOW_JITSI_WATERMARK: false
+              }
+            });
+            jitsiClassroomApi.addListener('videoConferenceLeft', () => {
+              if (activeClassroom) recordClassroomLeave_();
+            });
+            resolve(true);
+          } catch (err) { reject(err); }
+        };
+        if (window.JitsiMeetExternalAPI) return launch();
+        let script = document.getElementById('jitsiExternalApi');
+        if (!script) {
+          script = document.createElement('script');
+          script.id = 'jitsiExternalApi';
+          script.src = 'https://meet.jit.si/external_api.js';
+          script.onload = launch;
+          script.onerror = () => reject(new Error('The video classroom service could not be loaded. Check your internet connection.'));
+          document.head.appendChild(script);
+        } else {
+          script.addEventListener('load', launch, {once:true});
+          script.addEventListener('error', () => reject(new Error('The video classroom service could not be loaded.')), {once:true});
+        }
+      });
+    }
+
+    async function recordClassroomLeave_() {
+      if (!activeClassroom) return;
+      const current = activeClassroom;
+      activeClassroom = null;
+      try { await api('leaveClassroom', token, current.sessionID, classroomJoinEventID); } catch (e) {}
+      classroomJoinEventID = null;
+    }
+
+    async function onLeaveClassroom() {
+      if (jitsiClassroomApi) {
+        try { jitsiClassroomApi.dispose(); } catch (e) {}
+        jitsiClassroomApi = null;
+      }
+      await recordClassroomLeave_();
+      document.getElementById('classroomMeetingCard').classList.add('hidden');
+      document.getElementById('jitsiClassroomFrame').innerHTML = '';
+      await refreshView();
+    }
+
+    async function onUpdateClassroomMode(sessionID, mode) {
+      loading(true, 'Updating participation mode...');
+      try {
+        const res = await api('updateClassroomParticipation', token, sessionID, mode);
+        alertMsg('appAlert', res.message, res.success ? 'success' : 'error');
+        if (res.success) await refreshView();
+      } catch (err) { alertMsg('appAlert', err.message, 'error'); }
+      finally { loading(false); }
+    }
+
+    async function onEndClassroom(sessionID) {
+      if (!confirm('End this live lecture for all participants?')) return;
+      loading(true, 'Ending lecture...');
+      try {
+        const res = await api('endClassroom', token, sessionID);
+        alertMsg('appAlert', res.message, res.success ? 'success' : 'error');
+        if (activeClassroom && activeClassroom.sessionID === sessionID) await onLeaveClassroom();
+        else await refreshView();
+      } catch (err) { alertMsg('appAlert', err.message, 'error'); }
+      finally { loading(false); }
     }
 
     async function onSaveResult(e) {
