@@ -588,6 +588,20 @@
             </div>
             <div class="table-wrap" id="resultsBox"></div>
           </div>
+          <div id="gradeReportCard" class="card hidden">
+            <div class="flex-between mb-2">
+              <div>
+                <div class="card-title" style="margin:0;">Staff Grade Report &amp; GPA Compilation</div>
+                <div class="text-muted" id="gradeReportPeriod"></div>
+              </div>
+              <div class="flex gap-2">
+                <button type="button" class="btn btn-outline btn-sm" onclick="onPrintGradeReport()">Print Grade Report</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="onExportGradeReportExcel()">Export Spreadsheet</button>
+              </div>
+            </div>
+            <p class="text-muted mb-2">Staff-only report. Lecturer access is limited to assigned courses. Historical results without recorded session/semester are included in cGPA but not current-semester GPA.</p>
+            <div class="table-wrap" id="gradeReportBox"></div>
+          </div>
         </section>
 
         <!-- 7. DISCUSSION FORUM -->
@@ -885,6 +899,7 @@
       document.getElementById('staffAttBox').classList.toggle('hidden', !isStaff);
       document.getElementById('staffTestBox').classList.toggle('hidden', !isStaff);
       document.getElementById('staffResBox').classList.toggle('hidden', !isStaff);
+      document.getElementById('gradeReportCard').classList.toggle('hidden', !isStaff);
       document.getElementById('staffNoticeBox').classList.toggle('hidden', !isStaff);
 
       const links = [
@@ -1097,6 +1112,10 @@
 
         if (currentView === 'vResults') {
           const rRes = await api('getResults', token);          const list = rRes.results || [];
+          if (user.role !== 'Student') {
+            const report = await api('getGradeReport', token);
+            renderGradeReport_(report);
+          }
           const gpaEl = document.getElementById('gpaBadge');
           gpaEl.classList.add('hidden');
 
@@ -1360,6 +1379,55 @@
         URL.revokeObjectURL(url);
         alertMsg('appAlert', `Downloaded ${res.fileName}: ${res.count} eligible of ${res.total} enrolled students.`, 'success');
       } finally { loading(false); }
+    }
+
+    function renderGradeReport_(report) {
+      const period = [report.academicSession, report.semester].filter(Boolean).join(' • ') || 'Academic period not configured';
+      document.getElementById('gradeReportPeriod').textContent = period + ' — ' + (report.accessScope || 'Authorised staff');
+      const rows = [];
+      (report.students || []).forEach(st => {
+        (st.courses || []).forEach(cr => rows.push(
+          '<tr>' +
+          '<td>' + esc(st.matricNo) + '</td><td>' + esc(st.studentName) + '</td>' +
+          '<td>' + esc(cr.courseCode) + '</td><td>' + esc(cr.courseTitle) + '</td>' +
+          '<td>' + esc(cr.creditUnits) + '</td><td>' + (cr.hasResult ? esc(cr.totalScore) : 'Pending') + '</td>' +
+          '<td><strong>' + (cr.hasResult ? esc(cr.grade) : '—') + '</strong></td>' +
+          '<td>' + Number(st.gpa || 0).toFixed(2) + '</td><td>' + Number(st.cgpa || 0).toFixed(2) + '</td>' +
+          '<td>' + esc(st.classOfDegree) + '</td><td class="text-danger">' + esc(st.flag || '') + '</td></tr>'
+        ));
+      });
+      document.getElementById('gradeReportBox').innerHTML = rows.length
+        ? '<table><thead><tr><th>Matric No.</th><th>Student Name</th><th>Course</th><th>Course Title</th><th>CU</th><th>Total</th><th>Grade</th><th>GPA</th><th>cGPA</th><th>Class of Degree</th><th>Flag</th></tr></thead><tbody>' + rows.join('') + '</tbody></table>'
+        : '<p class="text-muted">No enrolled students or course records are available within your reporting access.</p>';
+      window._psycGradeReport = report;
+    }
+
+    async function onExportGradeReportExcel() {
+      loading(true, 'Preparing grade compilation spreadsheet...');
+      try {
+        const res = await api('exportGradeReportToExcel', token);
+        if (!res || !res.success) { alertMsg('appAlert', res && res.message ? res.message : 'Grade report export failed.'); return; }
+        const bytes = atob(res.base64), arr = new Uint8Array(bytes.length);
+        for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+        const url = URL.createObjectURL(new Blob([arr], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+        const a = document.createElement('a'); a.href = url; a.download = res.fileName; a.click(); URL.revokeObjectURL(url);
+        alertMsg('appAlert', 'Exported grade report for ' + res.students + ' student(s).', 'success');
+      } catch (err) { alertMsg('appAlert', err.message, 'error'); }
+      finally { loading(false); }
+    }
+
+    function onPrintGradeReport() {
+      const report = window._psycGradeReport;
+      if (!report) { alertMsg('appAlert', 'Load the grade report before printing.'); return; }
+      const w = window.open('', '_blank');
+      if (!w) { alertMsg('appAlert', 'Allow pop-ups to print the grade report.', 'error'); return; }
+      const escPrint = v => String(v == null ? '' : v).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+      let body = '';
+      (report.students || []).forEach(st => (st.courses || []).forEach(cr => {
+        body += '<tr><td>' + escPrint(st.matricNo) + '</td><td>' + escPrint(st.studentName) + '</td><td>' + escPrint(cr.courseCode) + '</td><td>' + escPrint(cr.courseTitle) + '</td><td>' + escPrint(cr.creditUnits) + '</td><td>' + (cr.hasResult ? escPrint(cr.totalScore) : 'Pending') + '</td><td>' + (cr.hasResult ? escPrint(cr.grade) : '—') + '</td><td>' + Number(st.gpa || 0).toFixed(2) + '</td><td>' + Number(st.cgpa || 0).toFixed(2) + '</td><td>' + escPrint(st.classOfDegree) + '</td><td>' + escPrint(st.flag || '') + '</td></tr>';
+      }));
+      w.document.write('<!doctype html><html><head><title>psyc@UNIDEL Grade Report</title><style>body{font:12px Arial,sans-serif;margin:20px}h2{text-align:center}p{text-align:center}table{border-collapse:collapse;width:100%}th,td{border:1px solid #777;padding:5px;text-align:left}th{background:#e8edf2}tr{page-break-inside:avoid}@media print{@page{size:landscape;margin:12mm}}</style></head><body><h2>DEPARTMENT OF PSYCHOLOGY</h2><h3 style="text-align:center">STUDENT GRADE REPORT &amp; GPA COMPILATION</h3><p>' + escPrint(report.academicSession) + ' — ' + escPrint(report.semester) + '</p><table><thead><tr><th>Matric No.</th><th>Student Name</th><th>Course</th><th>Course Title</th><th>CU</th><th>Total</th><th>Grade</th><th>GPA</th><th>cGPA</th><th>Class</th><th>Flag</th></tr></thead><tbody>' + body + '</tbody></table><script>window.onload=function(){window.print()}<\/script></body></html>');
+      w.document.close();
     }
 
     async function onExportResultsExcel() {
