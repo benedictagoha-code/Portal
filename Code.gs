@@ -1636,7 +1636,13 @@ function doPost(e) {
       exportGradeReportToExcel: exportGradeReportToExcel,
       getMessagingSettings: getMessagingSettings,
       setAllowExternalEmailRecipients: setAllowExternalEmailRecipients,
-      sendPortalEmail: sendPortalEmail
+      sendPortalEmail: sendPortalEmail,
+      startClassroom: startClassroom,
+      getClassrooms: getClassrooms,
+      joinClassroom: joinClassroom,
+      leaveClassroom: leaveClassroom,
+      updateClassroomParticipation: updateClassroomParticipation,
+      endClassroom: endClassroom
     };
 
     if (!Object.prototype.hasOwnProperty.call(ROUTES, fn)) {
@@ -1702,4 +1708,202 @@ function upgradeSystem310() {
   const external = rows.find(r => String(r.key).trim().toLowerCase() === 'allowexternalemailrecipients');
   if (!external) settings.appendRow(['AllowExternalEmailRecipients','YES']);
   return {success:true,version:'3.10',message:'Version 3.10 schema is ready. Grade-report columns and minimal EmailLog were added; existing result records and message privacy are preserved.'};
+}
+
+
+/* ============================================================
+   VERSION 11 — INTERACTIVE VIRTUAL CLASSROOM
+   Non-destructive migration and authenticated classroom APIs.
+   Live media transport is provided by Jitsi, not Apps Script.
+   ============================================================ */
+
+const V11_CLASSROOMS_SHEET = 'ClassroomsV11';
+const V11_CLASSROOM_EVENTS_SHEET = 'ClassroomEventsV11';
+const V11_PARTICIPATION_MODES = [
+  'VIEW_ONLY',
+  'AUDIO_PARTICIPATION',
+  'VIDEO_AUDIO',
+  'RAISE_HAND',
+  'OPEN_INTERACTIVE'
+];
+
+function upgradeSystem311Classroom() {
+  const ss = getDB_();
+  const definitions = [
+    [V11_CLASSROOMS_SHEET, [
+      'SessionID','RoomName','CourseID','CourseCode','CourseTitle','Title',
+      'LecturerID','LecturerName','ParticipationMode','Status','StartedAt','EndedAt'
+    ]],
+    [V11_CLASSROOM_EVENTS_SHEET, [
+      'EventID','SessionID','UserID','UserName','UserRole','EventType','OccurredAt'
+    ]]
+  ];
+  const created = [];
+  definitions.forEach(def => {
+    let sh = ss.getSheetByName(def[0]);
+    if (!sh) {
+      sh = ss.insertSheet(def[0]);
+      sh.appendRow(def[1]);
+      sh.getRange(1,1,1,def[1].length)
+        .setFontWeight('bold').setBackground('#123b5d').setFontColor('#ffffff');
+      created.push(def[0]);
+    } else {
+      const lastCol = Math.max(1, sh.getLastColumn());
+      const headers = sh.getRange(1,1,1,lastCol).getValues()[0].map(v => String(v).trim());
+      const missing = def[1].filter(h => headers.indexOf(h) < 0);
+      if (missing.length) {
+        sh.getRange(1,lastCol+1,1,missing.length).setValues([missing])
+          .setFontWeight('bold').setBackground('#123b5d').setFontColor('#ffffff');
+      }
+    }
+  });
+  return {
+    success:true,
+    version:'11-classroom-schema',
+    createdSheets:created,
+    message:'Classroom schema is ready. Existing portal sheets and records were not modified.'
+  };
+}
+
+function v11ClassroomSheet_(name) {
+  const sh = getDB_().getSheetByName(name);
+  if (!sh) throw new Error('Classroom database is not prepared. An administrator must run upgradeSystem311Classroom() first.');
+  return sh;
+}
+
+function v11ParticipationMode_(value) {
+  const mode = String(value || 'RAISE_HAND').trim().toUpperCase();
+  if (V11_PARTICIPATION_MODES.indexOf(mode) < 0) throw new Error('Choose a valid student participation mode.');
+  return mode;
+}
+
+function v11FindClassroom_(sessionID) {
+  const id = String(sessionID || '').trim();
+  if (!id) throw new Error('Classroom session is required.');
+  const row = getRows_(V11_CLASSROOMS_SHEET).find(r => String(r.sessionid) === id);
+  if (!row) throw new Error('Classroom session was not found.');
+  return row;
+}
+
+function v11CanAccessClassroom_(user, classroom) {
+  if (user.role === 'Administrator') return true;
+  if (user.role === 'Lecturer') {
+    requireCourseAccess_(user, classroom.courseid);
+    return true;
+  }
+  if (user.role === 'Student') {
+    if (!isStudentEnrolled_(user.userID, classroom.courseid)) {
+      throw new Error('You are not enrolled in this course.');
+    }
+    return true;
+  }
+  throw new Error('Your account cannot access the virtual classroom.');
+}
+
+function startClassroom(token, payload) {
+  const user = requireUser_(token, ['Lecturer','Administrator']);
+  payload = payload || {};
+  const course = requireCourseAccess_(user, payload.courseID);
+  const title = String(payload.title || '').trim().slice(0,160);
+  if (!title) throw new Error('Enter a lecture title or topic.');
+  const mode = v11ParticipationMode_(payload.participationMode);
+  const sh = v11ClassroomSheet_(V11_CLASSROOMS_SHEET);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const active = getRows_(V11_CLASSROOMS_SHEET).find(r =>
+      String(r.courseid) === String(course.courseid) && String(r.status).toUpperCase() === 'LIVE'
+    );
+    if (active) throw new Error('A live classroom is already open for this course.');
+    const sessionID = makeId_('CLS');
+    const roomName = 'psycUNIDEL-' + Utilities.getUuid().replace(/-/g,'');
+    const now = new Date().toISOString();
+    sh.appendRow([
+      sessionID, roomName, course.courseid, course.coursecode, course.coursetitle,
+      title, user.userID, user.name, mode, 'LIVE', now, ''
+    ]);
+    return {
+      success:true, sessionID:sessionID, roomName:roomName,
+      courseID:course.courseid, courseCode:course.coursecode, courseTitle:course.coursetitle,
+      title:title, participationMode:mode, status:'LIVE', startedAt:now,
+      message:'Virtual classroom opened. Students enrolled in this course can now join.'
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function getClassrooms(token, courseID) {
+  const user = requireUser_(token);
+  let rows = getRows_(V11_CLASSROOMS_SHEET);
+  if (user.role === 'Student') {
+    const enrolled = new Set(getRows_(SHEETS.ENROLMENTS)
+      .filter(e => normaliseMatric_(e.matricno) === normaliseMatric_(user.userID))
+      .map(e => String(e.courseid)));
+    rows = rows.filter(r => enrolled.has(String(r.courseid)));
+  } else if (user.role === 'Lecturer') {
+    const assigned = getLecturerCourseIds_(user.userID);
+    rows = rows.filter(r => assigned.has(String(r.courseid)));
+  }
+  if (courseID) rows = rows.filter(r => String(r.courseid) === String(courseID));
+  rows.sort((a,b) => String(b.startedat).localeCompare(String(a.startedat)));
+  return {success:true,classrooms:rows.map(r => ({
+    sessionID:r.sessionid, courseID:r.courseid, courseCode:r.coursecode,
+    courseTitle:r.coursetitle, title:r.title, lecturerName:r.lecturername,
+    participationMode:r.participationmode, status:r.status,
+    startedAt:r.startedat, endedAt:r.endedat
+  }))};
+}
+
+function joinClassroom(token, sessionID) {
+  const user = requireUser_(token);
+  const classroom = v11FindClassroom_(sessionID);
+  v11CanAccessClassroom_(user, classroom);
+  if (String(classroom.status).toUpperCase() !== 'LIVE') throw new Error('This classroom is not currently live.');
+  const now = new Date().toISOString();
+  const eventID = makeId_('EVT');
+  v11ClassroomSheet_(V11_CLASSROOM_EVENTS_SHEET).appendRow([
+    eventID, classroom.sessionid, user.userID, user.name, user.role, 'JOIN', now
+  ]);
+  return {
+    success:true, eventID:eventID, sessionID:classroom.sessionid,
+    roomName:classroom.roomname, title:classroom.title,
+    courseCode:classroom.coursecode, lecturerName:classroom.lecturername,
+    participationMode:classroom.participationmode, userID:user.userID,
+    displayName:user.name, role:user.role, joinedAt:now
+  };
+}
+
+function leaveClassroom(token, sessionID, eventID) {
+  const user = requireUser_(token);
+  const classroom = v11FindClassroom_(sessionID);
+  v11CanAccessClassroom_(user, classroom);
+  v11ClassroomSheet_(V11_CLASSROOM_EVENTS_SHEET).appendRow([
+    makeId_('EVT'), classroom.sessionid, user.userID, user.name, user.role,
+    'LEAVE:' + String(eventID || '').slice(0,80), new Date().toISOString()
+  ]);
+  return {success:true,message:'Classroom departure recorded.'};
+}
+
+function updateClassroomParticipation(token, sessionID, participationMode) {
+  const user = requireUser_(token, ['Lecturer','Administrator']);
+  const classroom = v11FindClassroom_(sessionID);
+  requireCourseAccess_(user, classroom.courseid);
+  if (String(classroom.status).toUpperCase() !== 'LIVE') throw new Error('The classroom has ended.');
+  const mode = v11ParticipationMode_(participationMode);
+  const sh = v11ClassroomSheet_(V11_CLASSROOMS_SHEET);
+  sh.getRange(classroom._row, 9).setValue(mode);
+  return {success:true,participationMode:mode,message:'Student participation settings updated.'};
+}
+
+function endClassroom(token, sessionID) {
+  const user = requireUser_(token, ['Lecturer','Administrator']);
+  const classroom = v11FindClassroom_(sessionID);
+  requireCourseAccess_(user, classroom.courseid);
+  if (String(classroom.status).toUpperCase() !== 'LIVE') {
+    return {success:true,message:'This classroom has already ended.'};
+  }
+  const sh = v11ClassroomSheet_(V11_CLASSROOMS_SHEET);
+  sh.getRange(classroom._row, 10, 1, 2).setValues([['ENDED',new Date().toISOString()]]);
+  return {success:true,message:'The virtual classroom has ended.'};
 }
