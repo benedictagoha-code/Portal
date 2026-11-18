@@ -1,5 +1,5 @@
 /**
- * psyc@UNIDEL 3.9 — Test Bank & Randomised Assessments
+ * psyc@UNIDEL 3.10 — Courseware, Messaging & Grade Compilation
  * Department of Psychology, University of Delta, Agbor
  * Existing installations: run upgradeSystem39() once; never rerun setupSystem().
  */
@@ -330,14 +330,14 @@ function getPublicInfo() {
     return {
       success: true,
       systemName: map.SystemName || 'psyc@UNIDEL',
-      version: map.Version || '3.9',
+      version: map.Version || '3.10',
       institution: map.Institution || 'University of Delta, Agbor',
       department: map.Department || 'Department of Psychology',
       academicSession: map.AcademicSession || '2025/2026',
       semester: map.Semester || 'First Semester'
     };
   } catch (e) {
-    return { success: true, systemName: 'psyc@UNIDEL', version: '3.9', institution: 'University of Delta, Agbor', department: 'Department of Psychology' };
+    return { success: true, systemName: 'psyc@UNIDEL', version: '3.10', institution: 'University of Delta, Agbor', department: 'Department of Psychology' };
   }
 }
 
@@ -1566,7 +1566,7 @@ function sendPortalEmail(token, payload) {
 function doGet(e) {
   return HtmlService
     .createHtmlOutputFromFile('Index')
-    .setTitle('psyc@UNIDEL 3.7 — Department of Psychology')
+    .setTitle('psyc@UNIDEL 3.10 — Department of Psychology')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
