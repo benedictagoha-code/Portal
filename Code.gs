@@ -223,7 +223,7 @@ function upgradeSystem391() {
   return {success:true,version:'3.9.1',message:'3.9.1 upgrade completed. Existing questions, records and attempts were retained.'};
 }
 function parseAnswerData_(v){if(!v)return{};try{const x=JSON.parse(String(v));return x&&typeof x==='object'?x:{};}catch(e){return{};}}
-function normaliseAnswerText_(v){return String(v==null?'':v).trim().replace(/\\s+/g,' ').toLowerCase();}
+function normaliseAnswerText_(v){return String(v==null?'':v).trim().replace(/\s+/g,' ').toLowerCase();}
 function buildQuestionAnswerData_(p,t){
   p=p||{};const d={};
   if(t==='FILL_GAP'){const a=Array.isArray(p.acceptedAnswers)?p.acceptedAnswers:String(p.correctAnswer||'').split('|');d.acceptedAnswers=a.map(normaliseAnswerText_).filter(Boolean);}
@@ -1042,7 +1042,11 @@ function getQuestionsForTest(token, testID) {
       if(count>0&&count<qs.length){qs=shuffleArray_(qs).slice(0,count);if(!randomOrder)qs.sort((a,b)=>all.indexOf(a)-all.indexOf(b));}
       else if(randomOrder) qs=shuffleArray_(qs);
       if(String(test.shuffleoptions||'NO').toUpperCase()==='YES') {
-        qs.forEach(q=>{if(['MCQ','MULTI_CORRECT','MULTI_INCORRECT'].indexOf(String(q.questiontype||'').toUpperCase())>=0){const opts=['A','B','C','D'].filter(k=>String(q['option'+k]||'').trim());optionMap[String(q.questionid)]=shuffleArray_(opts);}});
+        qs.forEach(q=>{
+          const typ=String(q.questiontype||'').toUpperCase();
+          if(['MCQ','MULTI_CORRECT','MULTI_INCORRECT'].indexOf(typ)>=0){const opts=['A','B','C','D'].filter(k=>String(q['option'+k]||'').trim());optionMap[String(q.questionid)]=shuffleArray_(opts);}
+          else if(typ==='MATCHING'){const ad=parseAnswerData_(q.answerdatajson);optionMap[String(q.questionid)]=shuffleArray_((ad.matchingPairs||[]).map(p=>p.right));}
+        });
       }
       const now=new Date(), expiry=new Date(now.getTime()+(Math.max(5,Number(test.durationminutes||30))+10)*60000);
       getDB_().getSheetByName(SHEETS.TEST_SESSIONS).appendRow([makeId_('SES'),testID,normaliseMatric_(user.userID),JSON.stringify(qs.map(q=>q.questionid)),JSON.stringify(optionMap),now.toISOString(),expiry.toISOString(),'NO']);
@@ -1051,8 +1055,8 @@ function getQuestionsForTest(token, testID) {
   const out=qs.map(q=>{
     const obj={questionID:q.questionid,questionType:q.questiontype,questionText:q.questiontext,optionA:q.optiona,optionB:q.optionb,optionC:q.optionc,optionD:q.optiond,marks:q.marks};
     const typ=String(q.questiontype||'').toUpperCase(),ad=parseAnswerData_(q.answerdatajson);
-    if(user.role==='Student'&&typ==='MATCHING'){const ps=ad.matchingPairs||[];obj.matchingPrompts=ps.map(p=>p.left);obj.matchingChoices=shuffleArray_(ps.map(p=>p.right));}
-    if(user.role==='Student'&&optionMap[String(q.questionid)])obj.optionOrder=optionMap[String(q.questionid)].map(k=>({key:k.toLowerCase(),label:q['option'+k]}));
+    if(user.role==='Student'&&typ==='MATCHING'){const ps=ad.matchingPairs||[];obj.matchingPrompts=ps.map(p=>p.left);obj.matchingChoices=optionMap[String(q.questionid)]||ps.map(p=>p.right);}
+    if(user.role==='Student'&&typ!=='MATCHING'&&optionMap[String(q.questionid)])obj.optionOrder=optionMap[String(q.questionid)].map(k=>({key:k.toLowerCase(),label:q['option'+k]}));
     return obj;
   });
   return {success:true,test:test,questions:out};
