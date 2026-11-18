@@ -1138,22 +1138,145 @@ function saveResult(token, payload) {
   if (!isFinite(ca) || !isFinite(exam) || ca < 0 || exam < 0 || ca > 100 || exam > 100) return { success: false, message: 'CA and examination scores must each be between 0 and 100.' };
   const total = Number((ca + exam).toFixed(2));
   const [grade, gp] = computeGrade_(total);
-  const matric = String(payload.matricNo || '').trim().toUpperCase();
+  const matric = normaliseMatric_(payload.matricNo);
   const stu = getRows_(SHEETS.STUDENTS).find(s => normaliseMatric_(s.matricno) === matric);
   if (!stu || !isStudentEnrolled_(matric, crs.courseid)) return { success: false, message: 'The student is not registered and enrolled in this course.' };
 
   const sh = getDB_().getSheetByName(SHEETS.RESULTS);
-  const existing = getRows_(SHEETS.RESULTS).find(r => r.courseid === crs.courseid && String(r.matricno).toUpperCase() === matric);
+  const headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(v => String(v).trim().toLowerCase());
+  const existing = getRows_(SHEETS.RESULTS).find(r => String(r.courseid) === String(crs.courseid) && normaliseMatric_(r.matricno) === matric);
   const rowVals = [
     existing ? existing.resultid : makeId_('RES'), crs.courseid, crs.coursecode, crs.coursetitle,
-    Number(crs.creditunits || 2), stu ? stu.studentid : matric, matric,
-    stu ? `${stu.surname} ${stu.firstname}` : matric, ca, exam, total, grade, gp, new Date().toISOString()
+    Number(crs.creditunits || 2), stu.studentid || matric, matric,
+    [stu.surname, stu.firstname, stu.othernames].filter(Boolean).join(' '), ca, exam, total, grade, gp, new Date().toISOString()
   ];
-
-  if (existing) sh.getRange(existing._row, 1, 1, rowVals.length).setValues([rowVals]);
-  else sh.appendRow(rowVals);
-
+  const rowNumber = existing ? existing._row : sh.getLastRow() + 1;
+  if (existing) sh.getRange(rowNumber, 1, 1, rowVals.length).setValues([rowVals]);
+  else sh.getRange(rowNumber, 1, 1, sh.getLastColumn()).setValues([rowVals.concat(Array(Math.max(0, sh.getLastColumn() - rowVals.length)).fill(''))]);
+  const sessionCol = headers.indexOf('academicsession') + 1;
+  const semesterCol = headers.indexOf('semester') + 1;
+  if (sessionCol > 0) sh.getRange(rowNumber, sessionCol).setValue(String(getSetting_('AcademicSession', '') || '').trim());
+  if (semesterCol > 0) sh.getRange(rowNumber, semesterCol).setValue(String(getSetting_('Semester', crs.semester || '') || '').trim());
   return { success: true, message: `Result saved for ${matric}: ${total} (${grade}).` };
+}
+
+function gradeClassFromCGPA_(value) {
+  const g = Number(value || 0);
+  if (g >= 4.5) return 'First Class';
+  if (g >= 3.5) return 'Second Class Upper';
+  if (g >= 2.4) return 'Second Class Lower';
+  if (g >= 2.0) return 'Third Class';
+  if (g >= 1.0) return 'Pass';
+  return 'Fail';
+}
+
+function gradeAverage_(rows) {
+  let units = 0, weighted = 0;
+  (rows || []).forEach(r => {
+    const cu = Number(r.creditunits || 0), gp = Number(r.gradepoint || 0);
+    if (cu > 0 && isFinite(gp)) { units += cu; weighted += cu * gp; }
+  });
+  return { units: units, points: weighted, value: units ? Number((weighted / units).toFixed(2)) : 0 };
+}
+
+function getGradeReportData_(user) {
+  if (!user || !['Administrator', 'Lecturer'].includes(user.role)) throw new Error('Access denied. Grade reports are restricted to authorised staff.');
+  const session = String(getSetting_('AcademicSession', '') || '').trim();
+  const semester = String(getSetting_('Semester', '') || '').trim();
+  const courses = getRows_(SHEETS.COURSES);
+  const allowedIds = user.role === 'Administrator'
+    ? new Set(courses.map(c => String(c.courseid)))
+    : getLecturerCourseIds_(user.userID);
+  const enrolments = getRows_(SHEETS.ENROLMENTS).filter(e => allowedIds.has(String(e.courseid)));
+  const students = getRows_(SHEETS.STUDENTS);
+  const results = getRows_(SHEETS.RESULTS);
+  const byStudent = new Map();
+
+  enrolments.forEach(e => {
+    const matric = normaliseMatric_(e.matricno);
+    if (!matric) return;
+    if (!byStudent.has(matric)) {
+      const st = students.find(s => normaliseMatric_(s.matricno) === matric) || {};
+      byStudent.set(matric, {
+        matricNo: matric,
+        studentName: [st.surname, st.firstname, st.othernames].filter(Boolean).join(' ') || e.studentname || matric,
+        programme: st.programme || '',
+        level: st.level || '',
+        courses: []
+      });
+    }
+    const course = courses.find(c => String(c.courseid) === String(e.courseid)) || {};
+    const allForCourse = results.filter(r => String(r.courseid) === String(e.courseid) && normaliseMatric_(r.matricno) === matric);
+    const result = allForCourse.length ? allForCourse[allForCourse.length - 1] : null;
+    byStudent.get(matric).courses.push({
+      courseID: e.courseid, courseCode: course.coursecode || result && result.coursecode || '',
+      courseTitle: course.coursetitle || result && result.coursetitle || '',
+      creditUnits: Number(course.creditunits || result && result.creditunits || 0),
+      caScore: result ? Number(result.cascore || 0) : '',
+      examScore: result ? Number(result.examscore || 0) : '',
+      totalScore: result ? Number(result.totalscore || 0) : '',
+      grade: result ? String(result.grade || '') : '',
+      gradePoint: result ? Number(result.gradepoint || 0) : '',
+      resultSession: result ? String(result.academicsession || '') : '',
+      resultSemester: result ? String(result.semester || '') : '',
+      hasResult: !!result
+    });
+  });
+
+  const report = Array.from(byStudent.values()).sort((a,b) => a.matricNo.localeCompare(b.matricNo));
+  report.forEach(st => {
+    const ownResults = results.filter(r => normaliseMatric_(r.matricno) === st.matricNo);
+    const termResults = ownResults.filter(r =>
+      String(r.academicsession || '').trim() === session &&
+      String(r.semester || '').trim() === semester &&
+      allowedIds.has(String(r.courseid))
+    );
+    const gpa = gradeAverage_(termResults);
+    const cgpa = gradeAverage_(ownResults);
+    st.gpa = gpa.value;
+    st.gpaUnits = gpa.units;
+    st.cgpa = cgpa.value;
+    st.cgpaUnits = cgpa.units;
+    st.flag = (gpa.value < 1 || cgpa.value < 1) ? 'WARNING: GPA/cGPA BELOW 1.00' : '';
+    st.classOfDegree = gradeClassFromCGPA_(cgpa.value);
+    st.courses.sort((a,b) => String(a.courseCode).localeCompare(String(b.courseCode)));
+  });
+  return { academicSession: session, semester: semester, students: report, accessScope: user.role === 'Administrator' ? 'All courses' : 'Courses assigned to this lecturer' };
+}
+
+function getGradeReport(token) {
+  const user = requireUser_(token, ['Lecturer', 'Administrator']);
+  return Object.assign({ success: true }, getGradeReportData_(user));
+}
+
+function exportGradeReportToExcel(token) {
+  const user = requireUser_(token, ['Lecturer', 'Administrator']);
+  const data = getGradeReportData_(user);
+  const temp = SpreadsheetApp.create('psyc_UNIDEL_Grade_Report_' + Date.now());
+  try {
+    const summary = temp.getSheets()[0];
+    summary.setName('Student Summary');
+    const summaryValues = [['Matriculation Number','Student Name','Programme','Level','Academic Session','Semester','GPA','cGPA','Warning Flag','Class of Degree','GPA Credit Units','cGPA Credit Units']];
+    data.students.forEach(st => summaryValues.push([st.matricNo,st.studentName,st.programme,st.level,data.academicSession,data.semester,st.gpa,st.cgpa,st.flag,st.classOfDegree,st.gpaUnits,st.cgpaUnits]));
+    summary.getRange(1,1,summaryValues.length,summaryValues[0].length).setValues(summaryValues);
+    const detail = temp.insertSheet('Course Grades');
+    const detailValues = [['Matriculation Number','Student Name','Programme','Level','Course Code','Course Title','Credit Units','CA Score','Examination Score','Total Score','Grade','Grade Point','Result Session','Result Semester','GPA','cGPA','Warning Flag','Class of Degree']];
+    data.students.forEach(st => st.courses.forEach(cr => detailValues.push([st.matricNo,st.studentName,st.programme,st.level,cr.courseCode,cr.courseTitle,cr.creditUnits,cr.caScore,cr.examScore,cr.totalScore,cr.grade,cr.gradePoint,cr.resultSession,cr.resultSemester,st.gpa,st.cgpa,st.flag,st.classOfDegree])));
+    detail.getRange(1,1,detailValues.length,detailValues[0].length).setValues(detailValues);
+    [summary,detail].forEach(sh => {
+      sh.getRange(1,1,1,sh.getLastColumn()).setFontWeight('bold').setBackground('#123b5d').setFontColor('#ffffff').setWrap(true);
+      sh.setFrozenRows(1); sh.autoResizeColumns(1,sh.getLastColumn());
+      sh.getDataRange().setVerticalAlignment('middle');
+    });
+    summary.getRange(1,1,summaryValues.length,summaryValues[0].length).createFilter();
+    const url = 'https://docs.google.com/spreadsheets/d/' + temp.getId() + '/export?format=xlsx';
+    const response = UrlFetchApp.fetch(url,{headers:{Authorization:'Bearer '+ScriptApp.getOAuthToken()},muteHttpExceptions:true});
+    if (response.getResponseCode() !== 200) throw new Error('Grade report Excel export failed. Check Google Drive/Sheets authorisation and try again.');
+    const blob=response.getBlob().setName('psyc_UNIDEL_Grade_Report.xlsx');
+    return {success:true,fileName:blob.getName(),base64:Utilities.base64Encode(blob.getBytes()),students:data.students.length,courses:data.students.reduce((n,s)=>n+s.courses.length,0)};
+  } finally {
+    DriveApp.getFileById(temp.getId()).setTrashed(true);
+  }
 }
 
 function getResults(token) {
@@ -1403,4 +1526,23 @@ function checkDatabaseConnection() {
   Logger.log('Database name: ' + ss.getName());
   Logger.log('Database sheets: ' +
     ss.getSheets().map(s => s.getName()).join(', '));
+}
+
+// Version 3.10 — non-destructive grade-report schema upgrade.
+function upgradeSystem310() {
+  const ss = getDB_();
+  const sh = ss.getSheetByName(SHEETS.RESULTS);
+  if (!sh) throw new Error('Results sheet is missing. No changes were made.');
+  const headers = sh.getRange(1,1,1,Math.max(1,sh.getLastColumn())).getValues()[0].map(v => String(v).trim());
+  ['AcademicSession','Semester'].forEach(name => {
+    if (headers.map(x => x.toLowerCase()).indexOf(name.toLowerCase()) < 0) {
+      sh.getRange(1,sh.getLastColumn()+1).setValue(name).setFontWeight('bold');
+    }
+  });
+  const settings = ss.getSheetByName(SHEETS.SETTINGS);
+  const rows = getRows_(SHEETS.SETTINGS);
+  const version = rows.find(r => String(r.key).trim().toLowerCase() === 'version');
+  if (version) settings.getRange(version._row,2).setValue('3.10');
+  else settings.appendRow(['Version','3.10']);
+  return {success:true,version:'3.10',message:'Version 3.10 grade-report columns are ready. Existing result records were preserved; historical records without session/semester remain unassigned.'};
 }
