@@ -2,15 +2,6 @@ name: Sync Apps Script source
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - 'Code.gs'
-      - 'Index.html'
-      - '.clasp.json'
-      - '.claspignore'
-      - '.github/workflows/sync-apps-script.yml'
 
 permissions:
   contents: read
