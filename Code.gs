@@ -1144,7 +1144,14 @@ function saveResult(token, payload) {
 
   const sh = getDB_().getSheetByName(SHEETS.RESULTS);
   const headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(v => String(v).trim().toLowerCase());
-  const existing = getRows_(SHEETS.RESULTS).find(r => String(r.courseid) === String(crs.courseid) && normaliseMatric_(r.matricno) === matric);
+  const academicSession = String(getSetting_('AcademicSession', '') || '').trim();
+  const semester = String(getSetting_('Semester', crs.semester || '') || '').trim();
+  const existing = getRows_(SHEETS.RESULTS).find(r =>
+    String(r.courseid) === String(crs.courseid) &&
+    normaliseMatric_(r.matricno) === matric &&
+    String(r.academicsession || '').trim() === academicSession &&
+    String(r.semester || '').trim() === semester
+  );
   const rowVals = [
     existing ? existing.resultid : makeId_('RES'), crs.courseid, crs.coursecode, crs.coursetitle,
     Number(crs.creditunits || 2), stu.studentid || matric, matric,
@@ -1155,8 +1162,8 @@ function saveResult(token, payload) {
   else sh.getRange(rowNumber, 1, 1, sh.getLastColumn()).setValues([rowVals.concat(Array(Math.max(0, sh.getLastColumn() - rowVals.length)).fill(''))]);
   const sessionCol = headers.indexOf('academicsession') + 1;
   const semesterCol = headers.indexOf('semester') + 1;
-  if (sessionCol > 0) sh.getRange(rowNumber, sessionCol).setValue(String(getSetting_('AcademicSession', '') || '').trim());
-  if (semesterCol > 0) sh.getRange(rowNumber, semesterCol).setValue(String(getSetting_('Semester', crs.semester || '') || '').trim());
+  if (sessionCol > 0) sh.getRange(rowNumber, sessionCol).setValue(academicSession);
+  if (semesterCol > 0) sh.getRange(rowNumber, semesterCol).setValue(semester);
   return { success: true, message: `Result saved for ${matric}: ${total} (${grade}).` };
 }
 
@@ -1207,7 +1214,9 @@ function getGradeReportData_(user) {
     }
     const course = courses.find(c => String(c.courseid) === String(e.courseid)) || {};
     const allForCourse = results.filter(r => String(r.courseid) === String(e.courseid) && normaliseMatric_(r.matricno) === matric);
-    const result = allForCourse.length ? allForCourse[allForCourse.length - 1] : null;
+    const currentResult = allForCourse.filter(r => String(r.academicsession || '').trim() === session && String(r.semester || '').trim() === semester);
+    const legacyResult = allForCourse.filter(r => !String(r.academicsession || '').trim() && !String(r.semester || '').trim());
+    const result = currentResult.length ? currentResult[currentResult.length - 1] : (legacyResult.length ? legacyResult[legacyResult.length - 1] : null);
     byStudent.get(matric).courses.push({
       courseID: e.courseid, courseCode: course.coursecode || result && result.coursecode || '',
       courseTitle: course.coursetitle || result && result.coursetitle || '',
@@ -1455,6 +1464,7 @@ function resolvePortalEmailRecipient_(identifier) {
   const lecturers = getRows_(SHEETS.LECTURERS);
   const user = users.find(x => String(x.userid || '').trim().toUpperCase() === key.toUpperCase());
   if (user) {
+    if (String(user.active || '').toUpperCase() !== 'YES') return null;
     const student = students.find(x => normaliseMatric_(x.matricno) === normaliseMatric_(user.userid));
     const lecturer = lecturers.find(x => String(x.lecturerid || '').trim().toUpperCase() === key.toUpperCase());
     const email = String(user.email || student && student.email || lecturer && lecturer.email || '').trim();
@@ -1488,8 +1498,10 @@ function setAllowExternalEmailRecipients(token, enabled) {
 }
 
 function logEmailDelivery_(user, recipientCount, status) {
-  const sh = getDB_().getSheetByName('EmailLog');
-  if (sh) sh.appendRow([new Date().toISOString(),String(user.userID),String(user.name),String(user.role),Number(recipientCount || 0),String(status)]);
+  try {
+    const sh = getDB_().getSheetByName('EmailLog');
+    if (sh) sh.appendRow([new Date().toISOString(),String(user.userID),String(user.name),String(user.role),Number(recipientCount || 0),String(status)]);
+  } catch (e) { /* Delivery logging must never store message content or block delivery. */ }
 }
 
 function sendPortalEmail(token, payload) {
