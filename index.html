@@ -479,7 +479,7 @@
                   <div class="form-group"><label>Option b</label><input type="text" id="qB"></div>
                   <div class="form-group"><label>Option c</label><input type="text" id="qC"></div>
                   <div class="form-group"><label>Option d</label><input type="text" id="qD"></div>
-                  <div class="form-group"><label>Correct Option</label><select id="qAnsMcq"><option value="a">a</option><option value="b">b</option><option value="c">c</option><option value="d">d</option></select></div>
+                  <div class="form-group" id="qSingleCorrectWrap"><label>Correct Option</label><select id="qAnsMcq"><option value="a">a</option><option value="b">b</option><option value="c">c</option><option value="d">d</option></select></div>
                 </div>
                 <div id="qTfWrap" class="full hidden">
                   <div class="form-group"><label>Correct Answer</label><select id="qAnsTf"><option value="TRUE">True</option><option value="FALSE">False</option></select></div>
@@ -506,7 +506,7 @@
               <div class="form-group full"><label>Question *</label><textarea id="bankText" rows="2" required></textarea></div>
               <div class="form-group"><label>Option A</label><input id="bankA"></div><div class="form-group"><label>Option B</label><input id="bankB"></div>
               <div class="form-group"><label>Option C</label><input id="bankC"></div><div class="form-group"><label>Option D</label><input id="bankD"></div>
-              <div class="form-group"><label id="bankAnswerLabel">Correct answer (a/b/c/d or TRUE/FALSE)</label><input id="bankAnswer" required></div>
+              <div class="form-group" id="bankSingleAnswerWrap"><label id="bankAnswerLabel">Correct answer (a/b/c/d or TRUE/FALSE)</label><input id="bankAnswer" required></div>
               <div class="form-group full hidden" id="bankMatchingWrap"><label>Matching pairs (one per line: prompt =&gt; correct match)</label><textarea id="bankMatching" rows="5" placeholder="Classical conditioning =&gt; Pavlov\nOperant conditioning =&gt; Skinner"></textarea></div>
               <div class="form-group hidden" id="bankMultiWrap"><label>Correct option keys (comma-separated, e.g. a,c)</label><input id="bankMultiKeys" placeholder="a,c"><label>Marking</label><select id="bankMultiMode"><option value="PARTIAL">Partial credit (penalty for incorrect selections)</option><option value="EXACT">All-or-nothing</option></select></div>
               <div class="form-group"><label>Explanation / Marking note</label><input id="bankExplanation"></div>
@@ -1387,13 +1387,17 @@
       document.getElementById('qTfWrap').classList.toggle('hidden',t!=='TRUE_FALSE');
       document.getElementById('qGapWrap').classList.toggle('hidden',t!=='FILL_GAP');
       document.getElementById('qMatchWrap').classList.toggle('hidden',t!=='MATCHING');
-      document.getElementById('qMultiWrap').classList.toggle('hidden',!['MULTI_CORRECT','MULTI_INCORRECT'].includes(t));
+      const multi=['MULTI_CORRECT','MULTI_INCORRECT'].includes(t);
+      document.getElementById('qMultiWrap').classList.toggle('hidden',!multi);
+      document.getElementById('qSingleCorrectWrap').classList.toggle('hidden',multi);
       document.querySelector('#qMultiWrap label').textContent=t==='MULTI_INCORRECT'?'Option keys that are incorrect (comma-separated, e.g. a,c)':'Correct option keys (comma-separated, e.g. a,c)';
     }
     function toggleBankQuestionFields() {
       const t=document.getElementById('bankType').value;
+      const multi=['MULTI_CORRECT','MULTI_INCORRECT'].includes(t);
       document.getElementById('bankMatchingWrap').classList.toggle('hidden',t!=='MATCHING');
-      document.getElementById('bankMultiWrap').classList.toggle('hidden',!['MULTI_CORRECT','MULTI_INCORRECT'].includes(t));
+      document.getElementById('bankMultiWrap').classList.toggle('hidden',!multi);
+      document.getElementById('bankSingleAnswerWrap').classList.toggle('hidden',t==='MATCHING'||multi);
       const label=document.getElementById('bankAnswerLabel');
       label.textContent=t==='FILL_GAP'?'Accepted answers (separate with |)':t==='TRUE_FALSE'?'Correct answer (TRUE or FALSE)':'Correct option key (a/b/c/d)';
       document.getElementById('bankAnswer').required=t!=='MATCHING'&&t!=='MULTI_CORRECT'&&t!=='MULTI_INCORRECT';
