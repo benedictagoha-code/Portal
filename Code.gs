@@ -214,6 +214,24 @@ function upgradeSystem39() {
 /* ============================================================
    2. CORE HELPERS & SECURITY
    ============================================================ */
+function upgradeSystem391() {
+  const ss=getDB_(), qsh=ss.getSheetByName(SHEETS.QUESTIONS), bsh=ss.getSheetByName(SHEETS.TEST_BANK);
+  if(!qsh||!bsh) throw new Error('Required assessment and Test Bank sheets are missing. No migration was performed.');
+  [qsh,bsh].forEach(sh=>{const last=Math.max(1,sh.getLastColumn()),hs=sh.getRange(1,1,1,last).getValues()[0].map(v=>String(v).trim());if(hs.indexOf('AnswerDataJSON')<0)sh.getRange(1,last+1).setValue('AnswerDataJSON').setFontWeight('bold');});
+  const settings=ss.getSheetByName(SHEETS.SETTINGS), rows=getRows_(SHEETS.SETTINGS), version=rows.find(r=>String(r.key).trim().toLowerCase()==='version');
+  if(version)settings.getRange(version._row,2).setValue('3.9.1');else settings.appendRow(['Version','3.9.1']);
+  return {success:true,version:'3.9.1',message:'3.9.1 upgrade completed. Existing questions, records and attempts were retained.'};
+}
+function parseAnswerData_(v){if(!v)return{};try{const x=JSON.parse(String(v));return x&&typeof x==='object'?x:{};}catch(e){return{};}}
+function normaliseAnswerText_(v){return String(v==null?'':v).trim().replace(/\\s+/g,' ').toLowerCase();}
+function buildQuestionAnswerData_(p,t){
+  p=p||{};const d={};
+  if(t==='FILL_GAP'){const a=Array.isArray(p.acceptedAnswers)?p.acceptedAnswers:String(p.correctAnswer||'').split('|');d.acceptedAnswers=a.map(normaliseAnswerText_).filter(Boolean);}
+  if(t==='MATCHING'){const a=Array.isArray(p.matchingPairs)?p.matchingPairs:[];d.matchingPairs=a.map(x=>({left:String(x.left||'').trim(),right:String(x.right||'').trim()})).filter(x=>x.left&&x.right);}
+  if(t==='MULTI_CORRECT'||t==='MULTI_INCORRECT'){const a=Array.isArray(p.correctKeys)?p.correctKeys:String(p.correctAnswer||'').split(',');d.correctKeys=a.map(x=>String(x).trim().toLowerCase()).filter(x=>/^[a-d]$/.test(x));d.markingMode=String(p.markingMode||'PARTIAL').toUpperCase()==='EXACT'?'EXACT':'PARTIAL';}
+  return d;
+}
+
 function getDB_() {
   const id = PropertiesService.getScriptProperties().getProperty(PROP_DB_ID);
   if (!id) throw new Error('Database not initialised. Run setupSystem() once in Code.gs.');
@@ -816,36 +834,30 @@ function updateTestSettings(token, testID, payload) {
   return { success: true, message: 'Test policy, schedule, feedback, and component grading settings updated.' };
 }
 
-function addQuestion(token, payload) {
-  const user = requireUser_(token, ['Lecturer', 'Administrator']);
-  if (!payload.testID || !payload.questionText) return { success: false, message: 'Test and question text are required.' };
-  const test = getRows_(SHEETS.TESTS).find(t => String(t.testid) === String(payload.testID));
-  if (!test) return { success: false, message: 'Test not found.' };
-  requireCourseAccess_(user, test.courseid);
-
-  getDB_().getSheetByName(SHEETS.QUESTIONS).appendRow([
-    makeId_('QST'), payload.testID, payload.questionType || 'MCQ', payload.questionText,
-    payload.optionA || '', payload.optionB || '', payload.optionC || '', payload.optionD || '',
-    String(payload.correctAnswer || '').trim(), Number(payload.marks || 1)
-  ]);
-  return { success: true, message: 'Question saved.' };
+function addQuestion(token,payload){
+ const user=requireUser_(token,['Lecturer','Administrator']);
+ if(!payload.testID||!payload.questionText)return{success:false,message:'Test and question text are required.'};
+ const test=getRows_(SHEETS.TESTS).find(t=>String(t.testid)===String(payload.testID));if(!test)return{success:false,message:'Test not found.'};requireCourseAccess_(user,test.courseid);
+ const type=String(payload.questionType||'MCQ').toUpperCase(),allowed=['MCQ','TRUE_FALSE','FILL_GAP','MATCHING','MULTI_CORRECT','MULTI_INCORRECT'];if(allowed.indexOf(type)<0)return{success:false,message:'Unsupported question type.'};
+ const data=buildQuestionAnswerData_(payload,type);
+ if(type==='FILL_GAP'&&!data.acceptedAnswers.length)return{success:false,message:'Enter at least one accepted answer.'};
+ if(type==='MATCHING'&&data.matchingPairs.length<2)return{success:false,message:'Enter at least two matching pairs.'};
+ if((type==='MULTI_CORRECT'||type==='MULTI_INCORRECT')&&!data.correctKeys.length)return{success:false,message:'Select at least one correct key.'};
+ const sh=getDB_().getSheetByName(SHEETS.QUESTIONS);sh.appendRow([makeId_('QST'),payload.testID,type,payload.questionText,payload.optionA||'',payload.optionB||'',payload.optionC||'',payload.optionD||'',String(payload.correctAnswer||'').trim(),Number(payload.marks||1)]);
+ setCellByHeader_(SHEETS.QUESTIONS,sh.getLastRow(),'AnswerDataJSON',JSON.stringify(data));return{success:true,message:'Question saved.'};
 }
 
-function saveBankQuestion(token, payload) {
-  const user = requireUser_(token, ['Lecturer','Administrator']);
-  payload = payload || {};
-  const course = requireCourseAccess_(user, payload.courseID);
-  if (!String(payload.questionText || '').trim()) return {success:false,message:'Question text is required.'};
-  const type = String(payload.questionType || 'MCQ').toUpperCase();
-  if (['MCQ','TRUE_FALSE','FILL_GAP'].indexOf(type)<0) return {success:false,message:'Unsupported question type.'};
-  const id = makeId_('BANK'), now = new Date().toISOString();
-  getDB_().getSheetByName(SHEETS.TEST_BANK).appendRow([
-    id,course.courseid,user.userID,String(payload.sharing||'PRIVATE').toUpperCase()==='SHARED'?'SHARED':'PRIVATE',
-    String(payload.topic||'').trim(),String(payload.difficulty||'MEDIUM').toUpperCase(),type,String(payload.questionText).trim(),
-    payload.optionA||'',payload.optionB||'',payload.optionC||'',payload.optionD||'',String(payload.correctAnswer||'').trim(),
-    Math.max(0,Number(payload.marks||1)),String(payload.explanation||'').trim(),'ACTIVE',now,now
-  ]);
-  return {success:true,questionID:id,message:'Question saved to the Test Bank.'};
+function saveBankQuestion(token,payload){
+ const user=requireUser_(token,['Lecturer','Administrator']);payload=payload||{};const course=requireCourseAccess_(user,payload.courseID);
+ if(!String(payload.questionText||'').trim())return{success:false,message:'Question text is required.'};
+ const type=String(payload.questionType||'MCQ').toUpperCase(),allowed=['MCQ','TRUE_FALSE','FILL_GAP','MATCHING','MULTI_CORRECT','MULTI_INCORRECT'];if(allowed.indexOf(type)<0)return{success:false,message:'Unsupported question type.'};
+ const data=buildQuestionAnswerData_(payload,type);
+ if(type==='FILL_GAP'&&!data.acceptedAnswers.length)return{success:false,message:'Enter at least one accepted answer.'};
+ if(type==='MATCHING'&&data.matchingPairs.length<2)return{success:false,message:'Enter at least two matching pairs.'};
+ if((type==='MULTI_CORRECT'||type==='MULTI_INCORRECT')&&!data.correctKeys.length)return{success:false,message:'Select at least one correct key.'};
+ const id=makeId_('BANK'),now=new Date().toISOString(),sh=getDB_().getSheetByName(SHEETS.TEST_BANK);
+ sh.appendRow([id,course.courseid,user.userID,String(payload.sharing||'PRIVATE').toUpperCase()==='SHARED'?'SHARED':'PRIVATE',String(payload.topic||'').trim(),String(payload.difficulty||'MEDIUM').toUpperCase(),type,String(payload.questionText).trim(),payload.optionA||'',payload.optionB||'',payload.optionC||'',payload.optionD||'',String(payload.correctAnswer||'').trim(),Math.max(0,Number(payload.marks||1)),String(payload.explanation||'').trim(),'ACTIVE',now,now]);
+ setCellByHeader_(SHEETS.TEST_BANK,sh.getLastRow(),'AnswerDataJSON',JSON.stringify(data));return{success:true,questionID:id,message:'Question saved to the Test Bank.'};
 }
 function listBankQuestions(token, courseID) {
   const user = requireUser_(token,['Lecturer','Administrator']);
@@ -868,6 +880,7 @@ function addBankQuestionsToTest(token, testID, bankQuestionIDs) {
     if(!q) return;
     sh.appendRow([makeId_('QST'),testID,q.questiontype,q.questiontext,q.optiona,q.optionb,q.optionc,q.optiond,q.correctanswer,Number(q.marks||1)]);
     setCellByHeader_(SHEETS.QUESTIONS,sh.getLastRow(),'Explanation',q.explanation||'');
+    setCellByHeader_(SHEETS.QUESTIONS,sh.getLastRow(),'AnswerDataJSON',q.answerdatajson||'{}');
     added++;
   });
   return {success:true,added:added,message:added+' question(s) added to the assessment.'};
@@ -879,7 +892,11 @@ function updateBankQuestion(token, questionID, payload) {
   requireCourseAccess_(user,q.courseid);
   if(user.role!=='Administrator'&&String(q.ownerid).toUpperCase()!==String(user.userID).toUpperCase()) return {success:false,message:'Only the owner or Administrator can edit this question.'};
   payload=payload||{};
-  const fields={Topic:payload.topic, Difficulty:payload.difficulty, Sharing:payload.sharing, QuestionType:payload.questionType, QuestionText:payload.questionText, OptionA:payload.optionA, OptionB:payload.optionB, OptionC:payload.optionC, OptionD:payload.optionD, CorrectAnswer:payload.correctAnswer, Marks:payload.marks, Explanation:payload.explanation, UpdatedAt:new Date().toISOString()};
+  const type=String(payload.questionType||q.questiontype||'MCQ').toUpperCase(),data=buildQuestionAnswerData_(payload,type);
+  if(type==='FILL_GAP'&&!data.acceptedAnswers.length)return{success:false,message:'Enter at least one accepted answer.'};
+  if(type==='MATCHING'&&data.matchingPairs.length<2)return{success:false,message:'Enter at least two matching pairs.'};
+  if((type==='MULTI_CORRECT'||type==='MULTI_INCORRECT')&&!data.correctKeys.length)return{success:false,message:'Select at least one correct key.'};
+  const fields={Topic:payload.topic,Difficulty:payload.difficulty,Sharing:payload.sharing,QuestionType:type,QuestionText:payload.questionText,OptionA:payload.optionA,OptionB:payload.optionB,OptionC:payload.optionC,OptionD:payload.optionD,CorrectAnswer:payload.correctAnswer,AnswerDataJSON:JSON.stringify(data),Marks:payload.marks,Explanation:payload.explanation,UpdatedAt:new Date().toISOString()};
   Object.keys(fields).forEach(h=>{if(fields[h]!==undefined)setCellByHeader_(SHEETS.TEST_BANK,q._row,h,fields[h]);});
   return {success:true,message:'Test Bank question updated.'};
 }
@@ -1025,12 +1042,7 @@ function getQuestionsForTest(token, testID) {
       if(count>0&&count<qs.length){qs=shuffleArray_(qs).slice(0,count);if(!randomOrder)qs.sort((a,b)=>all.indexOf(a)-all.indexOf(b));}
       else if(randomOrder) qs=shuffleArray_(qs);
       if(String(test.shuffleoptions||'NO').toUpperCase()==='YES') {
-        qs.forEach(q=>{
-          if(String(q.questiontype).toUpperCase()==='MCQ'){
-            const opts=['A','B','C','D'].filter(k=>String(q['option'+k]||'').trim());
-            optionMap[String(q.questionid)]=shuffleArray_(opts);
-          }
-        });
+        qs.forEach(q=>{if(['MCQ','MULTI_CORRECT','MULTI_INCORRECT'].indexOf(String(q.questiontype||'').toUpperCase())>=0){const opts=['A','B','C','D'].filter(k=>String(q['option'+k]||'').trim());optionMap[String(q.questionid)]=shuffleArray_(opts);}});
       }
       const now=new Date(), expiry=new Date(now.getTime()+(Math.max(5,Number(test.durationminutes||30))+10)*60000);
       getDB_().getSheetByName(SHEETS.TEST_SESSIONS).appendRow([makeId_('SES'),testID,normaliseMatric_(user.userID),JSON.stringify(qs.map(q=>q.questionid)),JSON.stringify(optionMap),now.toISOString(),expiry.toISOString(),'NO']);
@@ -1038,7 +1050,9 @@ function getQuestionsForTest(token, testID) {
   } else qs=all;
   const out=qs.map(q=>{
     const obj={questionID:q.questionid,questionType:q.questiontype,questionText:q.questiontext,optionA:q.optiona,optionB:q.optionb,optionC:q.optionc,optionD:q.optiond,marks:q.marks};
-    if(user.role==='Student'&&optionMap[String(q.questionid)]) obj.optionOrder=optionMap[String(q.questionid)].map(k=>({key:k.toLowerCase(),label:q['option'+k]}));
+    const typ=String(q.questiontype||'').toUpperCase(),ad=parseAnswerData_(q.answerdatajson);
+    if(user.role==='Student'&&typ==='MATCHING'){const ps=ad.matchingPairs||[];obj.matchingPrompts=ps.map(p=>p.left);obj.matchingChoices=shuffleArray_(ps.map(p=>p.right));}
+    if(user.role==='Student'&&optionMap[String(q.questionid)])obj.optionOrder=optionMap[String(q.questionid)].map(k=>({key:k.toLowerCase(),label:q['option'+k]}));
     return obj;
   });
   return {success:true,test:test,questions:out};
@@ -1071,13 +1085,12 @@ function submitCBTAttempt(token, testID, answers) {
     qs.forEach((q, idx) => {
       const mk = Math.max(0, Number(q.marks || 1));
       rawMax += mk;
-      const givenRaw = String((answers && answers[q.questionid]) || '').trim();
-      const given = givenRaw.toLowerCase();
-      const expected = String(q.correctanswer || '').trim().toLowerCase();
-      const accepted = q.questiontype === 'FILL_GAP' ? expected.split('|').map(x => x.trim()) : [expected];
-      const isCorrect = Boolean(given && accepted.indexOf(given) !== -1);
-      if (isCorrect) rawScore += mk;
-      reviewItems.push({ number: idx + 1, questionText: q.questiontext, yourAnswer: givenRaw || '(No Answer)', correctAnswer: q.correctanswer, isCorrect: isCorrect });
+      const raw=answers&&answers[q.questionid],typ=String(q.questiontype||'').toUpperCase(),ad=parseAnswerData_(q.answerdatajson);let earned=0,isCorrect=false,givenRaw='';
+      if(typ==='FILL_GAP'){givenRaw=String(raw==null?'':raw).trim();const accepted=(ad.acceptedAnswers&&ad.acceptedAnswers.length?ad.acceptedAnswers:String(q.correctanswer||'').split('|')).map(normaliseAnswerText_);isCorrect=!!givenRaw&&accepted.indexOf(normaliseAnswerText_(givenRaw))>=0;earned=isCorrect?mk:0;}
+      else if(typ==='MATCHING'){const response=raw&&typeof raw==='object'?raw:{},pairs=ad.matchingPairs||[];let matched=0;pairs.forEach((p,i)=>{if(normaliseAnswerText_(response[String(i)])===normaliseAnswerText_(p.right))matched++;});earned=pairs.length?mk*matched/pairs.length:0;isCorrect=pairs.length>0&&matched===pairs.length;givenRaw=Object.keys(response).map(k=>(Number(k)+1)+': '+response[k]).join('; ')||'(No Answer)';}
+      else if(typ==='MULTI_CORRECT'||typ==='MULTI_INCORRECT'){const selected=Array.isArray(raw)?raw.map(x=>String(x).toLowerCase()):[],correct=(ad.correctKeys||String(q.correctanswer||'').split(',')).map(x=>String(x).toLowerCase()),chosen=new Set(selected),target=new Set(correct),hits=correct.filter(x=>chosen.has(x)).length,extras=selected.filter(x=>!target.has(x)).length;isCorrect=chosen.size===target.size&&hits===target.size;earned=isCorrect?mk:(ad.markingMode==='EXACT'?0:Math.max(0,mk*(hits-extras)/Math.max(1,target.size)));givenRaw=selected.join(', ')||'(No Answer)';}
+      else{givenRaw=String(raw==null?'':raw).trim();isCorrect=!!givenRaw&&givenRaw.toLowerCase()===String(q.correctanswer||'').trim().toLowerCase();earned=isCorrect?mk:0;}
+      rawScore+=earned;reviewItems.push({number:idx+1,questionText:q.questiontext,yourAnswer:givenRaw||'(No Answer)',correctAnswer:q.correctanswer||'',isCorrect:isCorrect,earned:Number(earned.toFixed(2)),maxMarks:mk});
     });
     const maxScore = Number(test.totalmarks || rawMax);
     const scaledScore = rawMax > 0 ? Number(((rawScore / rawMax) * maxScore).toFixed(2)) : 0;
