@@ -1494,6 +1494,9 @@ function logEmailDelivery_(user, recipientCount, status) {
 
 function sendPortalEmail(token, payload) {
   const user = requireUser_(token);
+  if (user.role === 'Student' && !getRows_(SHEETS.ENROLMENTS).some(e => normaliseMatric_(e.matricno) === normaliseMatric_(user.userID))) {
+    return {success:false,message:'Only students enrolled in at least one course may use portal email messaging.'};
+  }
   payload = payload || {};
   const subject = String(payload.subject || '').trim();
   const body = String(payload.body || '').trim();
