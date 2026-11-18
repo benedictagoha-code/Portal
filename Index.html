@@ -1388,6 +1388,7 @@
       document.getElementById('qGapWrap').classList.toggle('hidden',t!=='FILL_GAP');
       document.getElementById('qMatchWrap').classList.toggle('hidden',t!=='MATCHING');
       document.getElementById('qMultiWrap').classList.toggle('hidden',!['MULTI_CORRECT','MULTI_INCORRECT'].includes(t));
+      document.querySelector('#qMultiWrap label').textContent=t==='MULTI_INCORRECT'?'Option keys that are incorrect (comma-separated, e.g. a,c)':'Correct option keys (comma-separated, e.g. a,c)';
     }
     function toggleBankQuestionFields() {
       const t=document.getElementById('bankType').value;
