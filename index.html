@@ -353,13 +353,13 @@
         <!-- 3. COURSEWARE MATERIALS -->
         <section id="vMaterials" class="view hidden">
           <div id="staffMatBox" class="card hidden">
-            <div class="card-title">Upload Courseware / Lecture Notes</div>
+            <div class="card-title">Upload Courseware, Audio, Video &amp; External Resources</div>
             <form onsubmit="onUploadMaterial(event)" class="form-grid">
               <div class="form-group"><label>Course *</label><select id="mCourse" required></select></div>
-              <div class="form-group"><label>Type</label><select id="mType"><option>Lecture Note</option><option>Reading Material</option><option>Assignment</option></select></div>
+              <div class="form-group"><label>Resource type</label><select id="mType"><option>Lecture Note</option><option>Reading Material</option><option>Assignment</option><option>Video Lecture</option><option>Audio Lecture</option><option>YouTube Resource</option><option>Facebook Resource</option><option>TikTok Resource</option><option>External Website</option></select></div>
               <div class="form-group full"><label>Title *</label><input type="text" id="mTitle" required></div>
-              <div class="form-group"><label>File (PDF/DOCX/PPTX)</label><input type="file" id="mFile"></div>
-              <div class="form-group"><label>Or External URL</label><input type="url" id="mLink" placeholder="https://..."></div>
+              <div class="form-group"><label>Upload file (PDF, Office, video or audio)</label><input type="file" id="mFile" accept=".pdf,.doc,.docx,.ppt,.pptx,.mp4,.webm,.mov,.mp3,.wav,.m4a,audio/*,video/*"><small class="text-muted">For large media files, upload to your approved cloud storage and paste its share link instead.</small></div>
+              <div class="form-group"><label>Or external link (YouTube, Facebook, TikTok, website, Drive)</label><input type="url" id="mLink" placeholder="https://..."></div>
               <div class="full"><button type="submit" class="btn btn-primary">Publish Material</button></div>
             </form>
           </div>
@@ -1343,6 +1343,7 @@
         const fInput = document.getElementById('mFile');
         if (fInput.files && fInput.files[0]) {
           const f = fInput.files[0];
+          if (f.size > 20 * 1024 * 1024) throw new Error('Please keep direct uploads below 20 MB. For larger video/audio files, upload to approved cloud storage and paste the share link.');
           payload.fileName = f.name;
           payload.mimeType = f.type;
           payload.base64Data = await new Promise((res, rej) => {
