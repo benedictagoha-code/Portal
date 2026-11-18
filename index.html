@@ -604,6 +604,38 @@
           </div>
         </section>
 
+        <!-- VERSION 3.10 — EMAIL MESSAGING -->
+        <section id="vEmail" class="view hidden">
+          <div class="card">
+            <div class="card-title">Compose and Send Email</div>
+            <p class="text-muted mb-2">Send directly to registered students, lecturers or administrators using their User ID / matriculation number, or enter an external email address. Separate multiple recipients with commas or new lines. Messages are delivered by email and are not stored in the portal.</p>
+            <form onsubmit="onSendPortalEmail(event)" class="form-grid">
+              <div class="form-group full">
+                <label>To — User ID, Matriculation Number or Email Address *</label>
+                <textarea id="mailRecipients" rows="2" placeholder="e.g. DEL/24/PSY/001, LEC-UNIDEL-0160, colleague@example.com" required></textarea>
+              </div>
+              <div class="form-group full">
+                <label>Subject *</label>
+                <input id="mailSubject" type="text" maxlength="200" required>
+              </div>
+              <div class="form-group full">
+                <label>Message *</label>
+                <textarea id="mailBody" rows="7" maxlength="10000" required></textarea>
+              </div>
+              <div class="full"><button type="submit" class="btn btn-primary">Send Email</button></div>
+            </form>
+            <div id="mailStatus" class="text-muted mt-2"></div>
+          </div>
+          <div id="externalEmailSetting" class="card hidden">
+            <div class="card-title">Administrator Email Controls</div>
+            <label style="display:flex;align-items:center;gap:10px;">
+              <input id="allowExternalEmail" type="checkbox" onchange="onSaveExternalEmailSetting(this.checked)">
+              Allow sending to external email addresses
+            </label>
+            <p class="text-muted mt-1">When disabled, users can send only to registered portal accounts with a valid email address.</p>
+          </div>
+        </section>
+
         <!-- 7. DISCUSSION FORUM -->
         <section id="vDiscussions" class="view hidden">
           <div class="card">
@@ -900,10 +932,12 @@
       document.getElementById('staffTestBox').classList.toggle('hidden', !isStaff);
       document.getElementById('staffResBox').classList.toggle('hidden', !isStaff);
       document.getElementById('gradeReportCard').classList.toggle('hidden', !isStaff);
+      document.getElementById('externalEmailSetting').classList.toggle('hidden', !isAdmin);
       document.getElementById('staffNoticeBox').classList.toggle('hidden', !isStaff);
 
       const links = [
         ['vDash', 'Dashboard'],
+        ['vEmail', 'Email Messaging'],
         ['vCourses', 'Courses & Enrolment'],
         ['vMaterials', 'Courseware'],
         ['vAttendance', 'Attendance & Eligibility'],
@@ -1131,6 +1165,15 @@
                 list.map(r => `<tr><td><strong>${esc(r.coursecode)}</strong> - ${esc(r.coursetitle)}</td>${user.role !== 'Student' ? `<td>${esc(r.matricno)}</td>` : ''}<td>${esc(r.cascore)}</td><td>${esc(r.examscore)}</td><td><strong>${esc(r.totalscore)}</strong></td><td><span class="badge ${r.grade === 'F' ? 'b-red' : 'b-green'}">${esc(r.grade)}</span></td></tr>`).join('')
               }</tbody></table>`
             : '<p class="text-muted">No compiled results yet.</p>';
+        }
+
+        if (currentView === 'vEmail') {
+          const settings = await api('getMessagingSettings', token);
+          const setting = document.getElementById('allowExternalEmail');
+          if (setting) setting.checked = !!settings.allowExternalRecipients;
+          document.getElementById('mailStatus').textContent = settings.allowExternalRecipients
+            ? 'External recipients are currently enabled. Maximum 10 recipients per message; daily sending limit is 20 messages per user.'
+            : 'External recipients are disabled by the administrator. Maximum 10 registered recipients per message; daily sending limit is 20 messages per user.';
         }
 
         if (currentView === 'vDiscussions') {
@@ -1379,6 +1422,38 @@
         URL.revokeObjectURL(url);
         alertMsg('appAlert', `Downloaded ${res.fileName}: ${res.count} eligible of ${res.total} enrolled students.`, 'success');
       } finally { loading(false); }
+    }
+
+    async function onSendPortalEmail(e) {
+      e.preventDefault();
+      loading(true, 'Sending email...');
+      try {
+        const res = await api('sendPortalEmail', token, {
+          recipients: document.getElementById('mailRecipients').value,
+          subject: document.getElementById('mailSubject').value,
+          body: document.getElementById('mailBody').value
+        });
+        alertMsg('appAlert', res.message, res.success ? 'success' : 'error');
+        if (res.success) {
+          document.getElementById('mailSubject').value = '';
+          document.getElementById('mailBody').value = '';
+          document.getElementById('mailRecipients').value = '';
+        }
+      } catch (err) { alertMsg('appAlert', err.message, 'error'); }
+      finally { loading(false); }
+    }
+
+    async function onSaveExternalEmailSetting(enabled) {
+      const box = document.getElementById('allowExternalEmail');
+      try {
+        const res = await api('setAllowExternalEmailRecipients', token, enabled);
+        if (!res || !res.success) throw new Error(res && res.message ? res.message : 'Could not update email setting.');
+        alertMsg('appAlert', res.message, 'success');
+        await refreshView();
+      } catch (err) {
+        box.checked = !enabled;
+        alertMsg('appAlert', err.message, 'error');
+      }
     }
 
     function renderGradeReport_(report) {
