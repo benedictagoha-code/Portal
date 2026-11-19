@@ -1971,6 +1971,22 @@ function getClassroomQuestions(token, sessionID) {
 }
 
 
+
+function updateClassroomQuestionStatus(token, sessionID, questionID, status) {
+  const user = requireUser_(token, ['Lecturer','Administrator']);
+  const classroom = v11FindClassroom_(sessionID);
+  requireCourseAccess_(user, classroom.courseid);
+  const next = String(status || '').trim().toUpperCase();
+  if (['SUBMITTED','ANSWERED'].indexOf(next) < 0) throw new Error('Choose a valid question status.');
+  const rows = getRows_('V11_ClassroomQuestions');
+  const row = rows.find(q => String(q.questionid) === String(questionID) &&
+    String(q.sessionid) === String(classroom.sessionid));
+  if (!row) throw new Error('The classroom question was not found.');
+  setCellByHeader_('V11_ClassroomQuestions', row._row, 'Status', next);
+  return {success:true,status:next,message:next === 'ANSWERED' ? 'Question marked as answered.' : 'Question returned to the submitted list.'};
+}
+
+
 function getClassroomAttendance(token, sessionID) {
   const user = requireUser_(token, ['Lecturer','Administrator']);
   const classroom = v11FindClassroom_(sessionID);
