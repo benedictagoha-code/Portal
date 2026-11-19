@@ -863,6 +863,31 @@
       } catch (err) { return ''; }
     }
 
+    function materialResourceMarkup(material) {
+      const href = safeResourceHref(material && material.fileurl);
+      if (!href) return '<span class="text-muted">No resource link</span>';
+      let parsed;
+      try { parsed = new URL(href); } catch (err) { return '<a href="' + esc(href) + '" target="_blank" rel="noopener noreferrer">Open resource</a>'; }
+      const path = parsed.pathname.toLowerCase();
+      let preview = '';
+      if (/\\.(mp4|webm|mov)$/.test(path)) {
+        preview = '<div class="mt-1"><video controls preload="metadata" style="width: min(100%, 420px); max-height: 240px;" src="' + esc(href) + '">Your browser does not support video playback.</video></div>';
+      } else if (/\\.(mp3|wav|m4a|ogg)$/.test(path)) {
+        preview = '<div class="mt-1"><audio controls preload="metadata" style="width: min(100%, 360px);" src="' + esc(href) + '">Your browser does not support audio playback.</audio></div>';
+      } else {
+        let videoId = '';
+        if (parsed.hostname === 'youtu.be') videoId = parsed.pathname.replace(/^\\//, '').split('/')[0];
+        else if (/(^|\\.)youtube\\.com$/.test(parsed.hostname)) {
+          if (parsed.pathname === '/watch') videoId = parsed.searchParams.get('v') || '';
+          else if (parsed.pathname.indexOf('/embed/') === 0) videoId = parsed.pathname.split('/')[2] || '';
+        }
+        if (/^[A-Za-z0-9_-]{11}$/.test(videoId)) {
+          preview = '<div class="mt-1"><iframe title="YouTube learning resource" src="https://www.youtube-nocookie.com/embed/' + videoId + '" loading="lazy" style="width:min(100%,560px);aspect-ratio:16/9;border:0;border-radius:8px;" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>';
+        }
+      }
+      return '<a class="btn btn-outline btn-sm" href="' + esc(href) + '" target="_blank" rel="noopener noreferrer">Open resource</a>' + preview;
+    }
+
     function fmtDate(val) {
       if (!val) return '-';
       const d = new Date(val);
@@ -1175,7 +1200,7 @@
           const list = mRes.materials || [];
           document.getElementById('materialsBox').innerHTML = list.length
             ? `<table><thead><tr><th>Course</th><th>Title</th><th>Type</th><th>By</th><th>Link</th></tr></thead><tbody>${
-                list.map(m => `<tr><td><strong>${esc(m.coursecode)}</strong></td><td>${esc(m.title)}</td><td><span class="badge b-slate">${esc(m.materialtype)}</span></td><td>${esc(m.uploadedby)}</td><td><a class="btn btn-outline btn-sm" href="${esc(safeResourceHref(m.fileurl))}" target="_blank" rel="noopener noreferrer" ${safeResourceHref(m.fileurl) ? '' : 'aria-disabled="true" onclick="return false"'}>Open</a></td></tr>`).join('')
+                list.map(m => `<tr><td><strong>${esc(m.coursecode)}</strong></td><td>${esc(m.title)}</td><td><span class="badge b-slate">${esc(m.materialtype)}</span></td><td>${esc(m.uploadedby)}</td><td>${materialResourceMarkup(m)}</td></tr>`).join('')
               }</tbody></table>`
             : '<p class="text-muted">No course materials uploaded yet.</p>';
         }
