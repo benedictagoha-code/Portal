@@ -38,6 +38,28 @@ for (const id of ids) {
   if (seen.has(id)) fail.push('index.html: duplicate element id ' + id);
   seen.add(id);
 }
+// Regression tests for lecturer display-name correction.
+const nameHelper = code.match(/function normaliseDisplayName_\\(name\\) \\{[\\s\\S]*?\\n\\}/);
+if (!nameHelper) fail.push('Code.gs: lecturer display-name normaliser missing');
+else {
+  const helperSource = nameHelper[0].replace(/^function normaliseDisplayName_/, 'function');
+  const normaliseDisplayName = vm.runInNewContext('(' + helperSource + ')');
+  const cases = [
+    ['Dr Agoha Benedict', 'Professor Benedict Agoha'],
+    ['Dr. Agoha Benedict', 'Professor Benedict Agoha'],
+    ['Agoha Benedict', 'Professor Benedict Agoha'],
+    ['Professor Other Lecturer', 'Professor Other Lecturer']
+  ];
+  for (const [input, expected] of cases) {
+    if (normaliseDisplayName(input) !== expected) fail.push('Display-name regression: ' + input);
+  }
+}
+if (!code.includes('name: normaliseDisplayName_(match.name)')) fail.push('Login does not apply the corrected lecturer display name.');
+for (const method of ['createClassroomPoll','getClassroomPolls','voteClassroomPoll','closeClassroomPoll']) {
+  if (!routes.includes(method) || !allowed.includes(method) || !code.includes('function ' + method + '(')) fail.push('Classroom poll wiring regression: ' + method);
+}
+if (!app.includes('onCreateClassroomPoll') || !app.includes('onVoteClassroomPoll')) fail.push('Classroom poll UI handlers missing.');
+
 if (fail.length) {
   console.error('V11 validation failed:\n- ' + fail.join('\n- '));
   process.exit(1);
