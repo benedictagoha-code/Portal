@@ -259,6 +259,13 @@ function makeId_(prefix) {
   return prefix + '-' + Utilities.getUuid().slice(0, 8).toUpperCase();
 }
 
+function normaliseDisplayName_(name) {
+  const original = String(name || '').trim();
+  const key = original.replace(/\./g, '').replace(/\s+/g, ' ').toLowerCase();
+  if (key === 'dr agoha benedict' || key === 'agoha benedict') return 'Professor Benedict Agoha';
+  return original;
+}
+
 function getSessionUser_(token) {
   if (!token) return null;
   const cached = CacheService.getScriptCache().get('TOK_' + token);
@@ -352,7 +359,7 @@ function loginUser(userID, password) {
   if (String(match.passwordhash) !== hash) return { success: false, message: 'Incorrect password.' };
 
   const token = Utilities.getUuid();
-  const sessionUser = { userID: match.userid, name: match.name, role: match.role };
+  const sessionUser = { userID: match.userid, name: normaliseDisplayName_(match.name), role: match.role };
   CacheService.getScriptCache().put('TOK_' + token, JSON.stringify(sessionUser), 21600);
   return { success: true, token: token, user: sessionUser };
 }
