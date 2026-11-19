@@ -332,10 +332,12 @@
                   <button type="button" class="btn btn-outline btn-sm" onclick="onClassroomMuteAll('audio')">Mute all microphones</button>
                   <button type="button" class="btn btn-outline btn-sm" onclick="onClassroomMuteAll('video')">Mute all cameras</button>
                   <button type="button" class="btn btn-outline btn-sm" onclick="refreshClassroomParticipants()">Refresh participants</button>
+                  <button type="button" class="btn btn-outline btn-sm" onclick="refreshClassroomQuestions()">View student questions</button>
                 </div>
               </div>
               <p class="text-muted mt-1">Use the selected participation mode to control who may speak or use cameras. Individual approval requests appear below. Students must consent before their microphones or cameras can be enabled.</p>
               <div id="classroomParticipantsBox" class="mt-1"><p class="text-muted">Loading participant list...</p></div>
+              <div id="classroomQuestionsBox" class="mt-2" aria-live="polite"></div>
             </div>
             <div class="card mb-2" id="classroomInteractionPanel" style="background:var(--surface-alt,#f8fafc);">
               <div class="flex-between" style="gap:0.6rem;flex-wrap:wrap;">
@@ -2130,6 +2132,45 @@
         if (hint) hint.textContent = 'Use the classroom chat for questions, comments and discussion. Keep contributions relevant to the lecture.';
       } catch (err) {
         alertMsg('appAlert', 'The classroom chat could not be opened: ' + err.message, 'error');
+      }
+    }
+
+    async function refreshClassroomQuestions() {
+      const box = document.getElementById('classroomQuestionsBox');
+      if (!box || !activeClassroom || !user || user.role === 'Student') return;
+      box.textContent = 'Loading submitted questions...';
+      try {
+        const result = await api('getClassroomQuestions', token, activeClassroom.sessionID);
+        const questions = result && result.questions ? result.questions : [];
+        box.replaceChildren();
+        const heading = document.createElement('strong');
+        heading.textContent = 'Recorded student questions (' + questions.length + ')';
+        box.appendChild(heading);
+        if (!questions.length) {
+          const empty = document.createElement('p');
+          empty.className = 'text-muted';
+          empty.textContent = 'No questions have been submitted yet.';
+          box.appendChild(empty);
+          return;
+        }
+        const list = document.createElement('div');
+        list.className = 'mt-1';
+        questions.forEach((item, index) => {
+          const entry = document.createElement('div');
+          entry.className = 'card mb-1';
+          entry.style.padding = '0.65rem';
+          const meta = document.createElement('small');
+          meta.className = 'text-muted';
+          meta.textContent = (index + 1) + '. ' + (item.userName || 'Student') + ' • ' + (item.submittedAt ? new Date(item.submittedAt).toLocaleString() : '');
+          const body = document.createElement('p');
+          body.style.margin = '0.35rem 0 0';
+          body.textContent = item.question || '';
+          entry.append(meta, body);
+          list.appendChild(entry);
+        });
+        box.appendChild(list);
+      } catch (err) {
+        box.textContent = 'Questions could not be loaded: ' + err.message;
       }
     }
 
