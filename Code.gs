@@ -1904,6 +1904,12 @@ function startClassroom(token, payload) {
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
+    if (payload.sessionID) {
+      const current = v11FindClassroom_(payload.sessionID);
+      if (String(current.status).toUpperCase() !== 'SCHEDULED') {
+        throw new Error('This scheduled lecture has already been started or cancelled.');
+      }
+    }
     const active = getRows_(V11_CLASSROOMS_SHEET).find(r =>
       String(r.courseid) === String(course.courseid) && String(r.status).toUpperCase() === 'LIVE'
     );
@@ -1946,7 +1952,16 @@ function getClassrooms(token, courseID) {
     rows = rows.filter(r => assigned.has(String(r.courseid)));
   }
   if (courseID) rows = rows.filter(r => String(r.courseid) === String(courseID));
-  rows.sort((a,b) => String(b.startedat).localeCompare(String(a.startedat)));
+  rows.sort((a,b) => {
+    const rank = r => {
+      const status = String(r.status || '').toUpperCase();
+      return status === 'SCHEDULED' ? 0 : status === 'LIVE' ? 1 : status === 'ENDED' ? 2 : 3;
+    };
+    const delta = rank(a) - rank(b);
+    if (delta) return delta;
+    if (rank(a) === 0) return new Date(a.scheduledat).getTime() - new Date(b.scheduledat).getTime();
+    return String(b.startedat || b.endedat || '').localeCompare(String(a.startedat || a.endedat || ''));
+  });
   return {success:true,classrooms:rows.map(r => ({
     sessionID:r.sessionid, courseID:r.courseid, courseCode:r.coursecode,
     courseTitle:r.coursetitle, title:r.title, lecturerName:r.lecturername,
