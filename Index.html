@@ -763,6 +763,7 @@
     let activeClassroom = null;
     let classroomJoinEventID = null;
     let jitsiClassroomApi = null;
+    let jitsiClassroomIsModerator = false;
 
     const MODE_LABELS = {
       HIGHEST: 'Best (Highest)',
@@ -1994,6 +1995,7 @@
       return new Promise((resolve, reject) => {
         const launch = () => {
           try {
+            jitsiClassroomIsModerator = false;
             const mode = joined.participationMode;
             const audioMuted = mode === 'VIEW_ONLY' || mode === 'RAISE_HAND';
             const videoMuted = mode === 'VIEW_ONLY' || mode === 'AUDIO_PARTICIPATION' || mode === 'RAISE_HAND';
@@ -2034,10 +2036,11 @@
             });
             jitsiClassroomApi.addListener('participantJoined', refreshClassroomParticipants);
             jitsiClassroomApi.addListener('participantLeft', refreshClassroomParticipants);
-            jitsiClassroomApi.addListener('videoConferenceJoined', () => {
-              if (user && user.role !== 'Student') applyClassroomModeToMeeting(mode);
-              refreshClassroomParticipants();
+            jitsiClassroomApi.addListener('participantRoleChanged', data => {
+              jitsiClassroomIsModerator = !!(data && data.role === 'moderator');
+              if (jitsiClassroomIsModerator) applyClassroomModeToMeeting(mode);
             });
+            jitsiClassroomApi.addListener('videoConferenceJoined', refreshClassroomParticipants);
             resolve(true);
           } catch (err) { reject(err); }
         };
@@ -2096,7 +2099,7 @@
     }
 
     function onClassroomMuteAll(mediaType) {
-      if (!jitsiClassroomApi || !activeClassroom || !user || user.role === 'Student') {
+      if (!jitsiClassroomApi || !activeClassroom || !user || user.role === 'Student' || !jitsiClassroomIsModerator) {
         alertMsg('appAlert', 'Lecturer controls are available only while you are hosting a classroom.', 'error');
         return;
       }
@@ -2110,7 +2113,7 @@
     }
 
     function applyClassroomModeToMeeting(mode) {
-      if (!jitsiClassroomApi || !user || user.role === 'Student') return;
+      if (!jitsiClassroomApi || !user || user.role === 'Student' || !jitsiClassroomIsModerator) return;
       const restricted = mode === 'VIEW_ONLY' || mode === 'RAISE_HAND';
       const audioModerated = restricted || mode === 'AUDIO_PARTICIPATION';
       const videoModerated = restricted || mode === 'AUDIO_PARTICIPATION';
@@ -2159,7 +2162,7 @@
     }
 
     function onClassroomParticipantAction(participantID, action) {
-      if (!jitsiClassroomApi || !activeClassroom || !user || user.role === 'Student') return;
+      if (!jitsiClassroomApi || !activeClassroom || !user || user.role === 'Student' || !jitsiClassroomIsModerator) return;
       try {
         if (action === 'askAudio') jitsiClassroomApi.executeCommand('askToUnmute', participantID);
         else if (action === 'approveVideo') jitsiClassroomApi.executeCommand('approveVideo', participantID);
