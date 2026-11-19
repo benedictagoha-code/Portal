@@ -1898,7 +1898,7 @@ function updateClassroomParticipation(token, sessionID, participationMode) {
   if (String(classroom.status).toUpperCase() !== 'LIVE') throw new Error('The classroom has ended.');
   const mode = v11ParticipationMode_(participationMode);
   const sh = v11ClassroomSheet_(V11_CLASSROOMS_SHEET);
-  sh.getRange(classroom._row, 9).setValue(mode);
+  setCellByHeader_(V11_CLASSROOMS_SHEET, classroom._row, 'ParticipationMode', mode);
   return {success:true,participationMode:mode,message:'Student participation settings updated.'};
 }
 
@@ -1910,6 +1910,8 @@ function endClassroom(token, sessionID) {
     return {success:true,message:'This classroom has already ended.'};
   }
   const sh = v11ClassroomSheet_(V11_CLASSROOMS_SHEET);
-  sh.getRange(classroom._row, 10, 1, 2).setValues([['ENDED',new Date().toISOString()]]);
+  const endedAt = new Date().toISOString();
+  setCellByHeader_(V11_CLASSROOMS_SHEET, classroom._row, 'Status', 'ENDED');
+  setCellByHeader_(V11_CLASSROOMS_SHEET, classroom._row, 'EndedAt', endedAt);
   return {success:true,message:'The virtual classroom has ended.'};
 }
