@@ -2027,33 +2027,46 @@ function leaveClassroom(token, sessionID, eventID) {
   v11CanAccessClassroom_(user, classroom);
   const joinID = String(eventID || '').trim().slice(0,80);
   if (!joinID) throw new Error('The classroom join record is missing.');
-  const events = getRows_(V11_CLASSROOM_EVENTS_SHEET);
-  const joined = events.some(e => String(e.eventid) === joinID &&
-    String(e.sessionid) === String(classroom.sessionid) &&
-    String(e.userid) === String(user.userID) &&
-    String(e.eventtype) === 'JOIN');
-  if (!joined) throw new Error('The matching classroom join record was not found.');
-  const leaveType = 'LEAVE:' + joinID;
-  if (events.some(e => String(e.sessionid) === String(classroom.sessionid) &&
-    String(e.userid) === String(user.userID) && String(e.eventtype) === leaveType)) {
-    return {success:true,message:'Classroom departure was already recorded.'};
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const events = getRows_(V11_CLASSROOM_EVENTS_SHEET);
+    const joined = events.some(e => String(e.eventid) === joinID &&
+      String(e.sessionid) === String(classroom.sessionid) &&
+      String(e.userid) === String(user.userID) &&
+      String(e.eventtype) === 'JOIN');
+    if (!joined) throw new Error('The matching classroom join record was not found.');
+    const leaveType = 'LEAVE:' + joinID;
+    if (events.some(e => String(e.sessionid) === String(classroom.sessionid) &&
+      String(e.userid) === String(user.userID) && String(e.eventtype) === leaveType)) {
+      return {success:true,message:'Classroom departure was already recorded.'};
+    }
+    v11ClassroomSheet_(V11_CLASSROOM_EVENTS_SHEET).appendRow([
+      makeId_('EVT'), classroom.sessionid, user.userID, user.name, user.role,
+      leaveType, new Date().toISOString()
+    ]);
+    return {success:true,message:'Classroom departure recorded.'};
+  } finally {
+    lock.releaseLock();
   }
-  v11ClassroomSheet_(V11_CLASSROOM_EVENTS_SHEET).appendRow([
-    makeId_('EVT'), classroom.sessionid, user.userID, user.name, user.role,
-    leaveType, new Date().toISOString()
-  ]);
-  return {success:true,message:'Classroom departure recorded.'};
 }
 
 function updateClassroomParticipation(token, sessionID, participationMode) {
   const user = requireUser_(token, ['Lecturer','Administrator']);
-  const classroom = v11FindClassroom_(sessionID);
-  requireCourseAccess_(user, classroom.courseid);
-  if (String(classroom.status).toUpperCase() !== 'LIVE') throw new Error('The classroom has ended.');
+  const initial = v11FindClassroom_(sessionID);
+  requireCourseAccess_(user, initial.courseid);
   const mode = v11ParticipationMode_(participationMode);
-  const sh = v11ClassroomSheet_(V11_CLASSROOMS_SHEET);
-  setCellByHeader_(V11_CLASSROOMS_SHEET, classroom._row, 'ParticipationMode', mode);
-  return {success:true,participationMode:mode,message:'Student participation settings updated.'};
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const classroom = v11FindClassroom_(sessionID);
+    requireCourseAccess_(user, classroom.courseid);
+    if (String(classroom.status).toUpperCase() !== 'LIVE') throw new Error('The classroom has ended.');
+    setCellByHeader_(V11_CLASSROOMS_SHEET, classroom._row, 'ParticipationMode', mode);
+    return {success:true,participationMode:mode,message:'Student participation settings updated.'};
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 
