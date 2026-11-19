@@ -342,7 +342,8 @@
                 <div><strong>Live lecture interaction</strong><p class="text-muted" style="margin:0.2rem 0 0;">Raise your hand, join the discussion, or use the live classroom chat.</p></div>
                 <div class="flex-between" style="gap:0.4rem;flex-wrap:wrap;">
                   <button type="button" class="btn btn-primary btn-sm" id="classroomRaiseHandBtn" onclick="onClassroomRaiseHand()">✋ Raise Hand</button>
-                  <button type="button" class="btn btn-outline btn-sm" onclick="onClassroomToggleChat()">💬 Open Chat / Q&amp;A</button>
+                  <button type="button" class="btn btn-outline btn-sm" onclick="onClassroomToggleChat()">💬 Open Chat</button>
+                  <button type="button" class="btn btn-outline btn-sm" onclick="onClassroomAskQuestion()">❓ Ask a Question</button>
                   <button type="button" class="btn btn-outline btn-sm" onclick="onClassroomShareScreen()">▣ Share Screen</button>
                 </div>
               </div>
@@ -2161,6 +2162,19 @@
       }
     }
 
+    function onClassroomAskQuestion() {
+      if (!jitsiClassroomApi || !activeClassroom) return;
+      const question = prompt('Enter your question for the lecturer:');
+      if (!question || !question.trim()) return;
+      try {
+        jitsiClassroomApi.executeCommand('sendChatMessage', 'QUESTION: ' + question.trim());
+        const hint = document.getElementById('classroomInteractionHint');
+        if (hint) hint.textContent = 'Your question has been sent to the live classroom chat.';
+      } catch (err) {
+        alertMsg('appAlert', 'Your question could not be sent: ' + err.message, 'error');
+      }
+    }
+
     function onClassroomShareScreen() {
       if (!jitsiClassroomApi || !activeClassroom) return;
       try {
@@ -2229,7 +2243,7 @@
             const hand = classroomRaisedHands[id] ? '<strong style="color:var(--warning,#b45309);">✋ Raised</strong>' : '—';
             const audio = p.audioMuted ? 'Muted' : 'On';
             const video = p.videoMuted ? 'Off' : 'On';
-            if (!id) return '';
+            if (!id || !/^[A-Za-z0-9_-]+$/.test(id)) return '';
             return '<tr><td>' + name + '</td><td>' + hand + '</td><td>' + audio + '</td><td>' + video + '</td><td>' +
               '<button type="button" class="btn btn-outline btn-sm" onclick="onClassroomParticipantAction(\'' + esc(id) + '\',\'askAudio\')">Ask to speak</button> ' +
               '<button type="button" class="btn btn-outline btn-sm" onclick="onClassroomParticipantAction(\'' + esc(id) + '\',\'approveVideo\')">Approve camera</button> ' +
