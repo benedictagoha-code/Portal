@@ -1873,14 +1873,20 @@ function scheduleClassroom(token, payload) {
 
 function cancelScheduledClassroom(token, sessionID) {
   const user = requireUser_(token, ['Lecturer','Administrator']);
-  const classroom = v11FindClassroom_(sessionID);
-  requireCourseAccess_(user, classroom.courseid);
-  if (String(classroom.status).toUpperCase() !== 'SCHEDULED') {
-    throw new Error('Only a scheduled lecture can be cancelled.');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const classroom = v11FindClassroom_(sessionID);
+    requireCourseAccess_(user, classroom.courseid);
+    if (String(classroom.status).toUpperCase() !== 'SCHEDULED') {
+      throw new Error('Only a scheduled lecture can be cancelled.');
+    }
+    setCellByHeader_(V11_CLASSROOMS_SHEET, classroom._row, 'Status', 'CANCELLED');
+    setCellByHeader_(V11_CLASSROOMS_SHEET, classroom._row, 'ScheduleStatus', 'CANCELLED');
+    return {success:true,message:'Scheduled lecture cancelled.'};
+  } finally {
+    lock.releaseLock();
   }
-  setCellByHeader_(V11_CLASSROOMS_SHEET, classroom._row, 'Status', 'CANCELLED');
-  setCellByHeader_(V11_CLASSROOMS_SHEET, classroom._row, 'ScheduleStatus', 'CANCELLED');
-  return {success:true,message:'Scheduled lecture cancelled.'};
 }
 
 function startClassroom(token, payload) {
