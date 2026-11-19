@@ -2160,14 +2160,21 @@ function getClassroomAttendance(token, sessionID) {
 
 function endClassroom(token, sessionID) {
   const user = requireUser_(token, ['Lecturer','Administrator']);
-  const classroom = v11FindClassroom_(sessionID);
-  requireCourseAccess_(user, classroom.courseid);
-  if (String(classroom.status).toUpperCase() !== 'LIVE') {
-    return {success:true,message:'This classroom has already ended.'};
+  const initial = v11FindClassroom_(sessionID);
+  requireCourseAccess_(user, initial.courseid);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const classroom = v11FindClassroom_(sessionID);
+    requireCourseAccess_(user, classroom.courseid);
+    if (String(classroom.status).toUpperCase() !== 'LIVE') {
+      return {success:true,message:'This classroom has already ended.'};
+    }
+    const endedAt = new Date().toISOString();
+    setCellByHeader_(V11_CLASSROOMS_SHEET, classroom._row, 'Status', 'ENDED');
+    setCellByHeader_(V11_CLASSROOMS_SHEET, classroom._row, 'EndedAt', endedAt);
+    return {success:true,message:'The classroom session has been closed in the portal. Participants already connected to the meeting may remain connected until they leave.'};
+  } finally {
+    lock.releaseLock();
   }
-  const sh = v11ClassroomSheet_(V11_CLASSROOMS_SHEET);
-  const endedAt = new Date().toISOString();
-  setCellByHeader_(V11_CLASSROOMS_SHEET, classroom._row, 'Status', 'ENDED');
-  setCellByHeader_(V11_CLASSROOMS_SHEET, classroom._row, 'EndedAt', endedAt);
-  return {success:true,message:'The classroom session has been closed in the portal. Participants already connected to the meeting may remain connected until they leave.'};
 }
