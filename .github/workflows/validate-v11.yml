@@ -1,0 +1,26 @@
+name: Validate psyc@UNIDEL V11
+
+on:
+  push:
+    branches:
+      - v11-development
+  pull_request:
+    branches:
+      - v11-development
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out V11 source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate V11 source and API wiring
+        run: node scripts/validate-v11.js
