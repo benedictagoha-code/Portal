@@ -2040,8 +2040,9 @@
             jitsiClassroomApi.addListener('participantLeft', refreshClassroomParticipants);
             jitsiClassroomApi.addListener('participantRoleChanged', data => {
               if (!data || !jitsiLocalParticipantID || data.id !== jitsiLocalParticipantID) return;
+              const wasModerator = jitsiClassroomIsModerator;
               jitsiClassroomIsModerator = data.role === 'moderator';
-              if (jitsiClassroomIsModerator) applyClassroomModeToMeeting(mode);
+              if (jitsiClassroomIsModerator && !wasModerator) applyClassroomModeToMeeting(mode);
             });
             jitsiClassroomApi.addListener('videoConferenceJoined', data => {
               jitsiLocalParticipantID = data && data.id ? data.id : '';
@@ -2134,7 +2135,6 @@
         if (restricted || mode === 'AUDIO_PARTICIPATION') {
           jitsiClassroomApi.executeCommand('muteEveryone', 'video');
         }
-        refreshClassroomParticipants();
       } catch (err) {
         alertMsg('appAlert', 'The meeting service could not update media moderation. Confirm that the lecturer is a meeting moderator. ' + err.message, 'error');
       }
@@ -2147,6 +2147,12 @@
         const result = await jitsiClassroomApi.getRoomsInfo();
         const rooms = result && result.rooms ? result.rooms : [];
         const participants = rooms.reduce((all, room) => all.concat(room.participants || []), []);
+        const selfParticipant = participants.find(p => String(p.id || '') === String(jitsiLocalParticipantID));
+        if (selfParticipant) {
+          const becameModerator = !jitsiClassroomIsModerator && selfParticipant.role === 'moderator';
+          jitsiClassroomIsModerator = selfParticipant.role === 'moderator';
+          if (becameModerator && activeClassroom) applyClassroomModeToMeeting(activeClassroom.participationMode);
+        }
         if (!participants.length) {
           box.innerHTML = '<p class="text-muted">No other participants have joined yet.</p>';
           return;
