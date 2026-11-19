@@ -594,7 +594,7 @@ function uploadMaterial(token, payload) {
     if (bytes.length > 20 * 1024 * 1024) throw new Error('Direct uploads are limited to 20 MB. Use an approved cloud link for larger media.');
     const safeName = String(payload.fileName).replace(/[^A-Za-z0-9._ -]/g, '_').slice(0, 180);
     const extension = safeName.substring(safeName.lastIndexOf('.') + 1).toLowerCase();
-    if (['pdf','doc','docx','ppt','pptx','mp4','webm','mov','mp3','wav','m4a'].indexOf(extension) < 0) {
+    if (['pdf','doc','docx','ppt','pptx','mp4','webm','mov','mp3','wav','m4a','ogg'].indexOf(extension) < 0) {
       throw new Error('Unsupported file type. Upload PDF, Office, video or audio files only.');
     }
     const folderId = PropertiesService.getScriptProperties().getProperty(PROP_DRIVE_ID);
@@ -611,7 +611,8 @@ function uploadMaterial(token, payload) {
       mov:'video/quicktime',
       mp3:'audio/mpeg',
       wav:'audio/wav',
-      m4a:'audio/mp4'
+      m4a:'audio/mp4',
+      ogg:'audio/ogg'
     };
     const blob = Utilities.newBlob(bytes, mimeTypes[extension], safeName);
     const file = folder.createFile(blob);
