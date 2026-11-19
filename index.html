@@ -2247,7 +2247,7 @@
     }
 
     async function onEndClassroom(sessionID) {
-      if (!confirm('End this live lecture for all participants?')) return;
+      if (!confirm('Close this classroom session in the portal? Participants already connected may remain in the meeting until they leave.')) return;
       loading(true, 'Ending lecture...');
       try {
         const res = await api('endClassroom', token, sessionID);
