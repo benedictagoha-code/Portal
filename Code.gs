@@ -1805,12 +1805,19 @@ function upgradeSystem311Classroom() {
         .setFontWeight('bold').setBackground('#123b5d').setFontColor('#ffffff');
       created.push(def[0]);
     } else {
-      const lastCol = Math.max(1, sh.getLastColumn());
-      const headers = sh.getRange(1,1,1,lastCol).getValues()[0].map(v => String(v).trim());
-      const missing = def[1].filter(h => headers.indexOf(h) < 0);
-      if (missing.length) {
-        sh.getRange(1,lastCol+1,1,missing.length).setValues([missing])
+      const lastCol = sh.getLastColumn();
+      const headers = lastCol > 0
+        ? sh.getRange(1,1,1,lastCol).getValues()[0].map(v => String(v).trim())
+        : [];
+      if (!headers.some(Boolean)) {
+        sh.getRange(1,1,1,def[1].length).setValues([def[1]])
           .setFontWeight('bold').setBackground('#123b5d').setFontColor('#ffffff');
+      } else {
+        const missing = def[1].filter(h => headers.indexOf(h) < 0);
+        if (missing.length) {
+          sh.getRange(1,lastCol+1,1,missing.length).setValues([missing])
+            .setFontWeight('bold').setBackground('#123b5d').setFontColor('#ffffff');
+        }
       }
     }
   });
