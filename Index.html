@@ -328,9 +328,14 @@
             <div id="classroomLecturerTools" class="hidden mb-2">
               <div class="flex-between" style="gap:0.5rem;flex-wrap:wrap;">
                 <strong>Lecturer controls</strong>
-                <button type="button" class="btn btn-outline btn-sm" onclick="onClassroomMuteAll()">Mute all student microphones</button>
+                <div class="flex-between" style="gap:0.4rem;flex-wrap:wrap;">
+                  <button type="button" class="btn btn-outline btn-sm" onclick="onClassroomMuteAll('audio')">Mute all microphones</button>
+                  <button type="button" class="btn btn-outline btn-sm" onclick="onClassroomMuteAll('video')">Mute all cameras</button>
+                  <button type="button" class="btn btn-outline btn-sm" onclick="refreshClassroomParticipants()">Refresh participants</button>
+                </div>
               </div>
-              <p class="text-muted mt-1">Use the meeting controls to manage participants. Students can use Raise Hand to request permission to speak. The lecturer can mute participants; students must consent before a lecturer can unmute their microphones.</p>
+              <p class="text-muted mt-1">Use the selected participation mode to control who may speak or use cameras. Individual approval requests appear below. Students must consent before their microphones or cameras can be enabled.</p>
+              <div id="classroomParticipantsBox" class="mt-1"><p class="text-muted">Loading participant list...</p></div>
             </div>
             <div id="classroomHandStatus" class="alert alert-success hidden mb-2" aria-live="polite"></div>
             <div id="jitsiClassroomFrame" style="width:100%;min-height:560px;border-radius:10px;overflow:hidden;background:#111827;"></div>
@@ -2015,15 +2020,23 @@
             });
             jitsiClassroomApi.addListener('raiseHandUpdated', data => {
               const box = document.getElementById('classroomHandStatus');
-              if (!box) return;
-              const who = data && (data.name || data.id) ? (data.name || data.id) : 'A participant';
-              if (data && data.handRaised) {
-                box.textContent = who + ' has raised a hand. Please use the participant controls to invite them to speak.';
-                box.classList.remove('hidden');
-              } else {
-                box.textContent = who + ' lowered their hand.';
-                box.classList.remove('hidden');
+              if (box) {
+                const who = data && data.id ? jitsiClassroomApi.getDisplayName(data.id) : 'A participant';
+                if (data && data.handRaised) {
+                  box.textContent = (who || 'A participant') + ' has raised a hand. Use the participant list to invite them to speak.';
+                  box.classList.remove('hidden');
+                } else {
+                  box.textContent = (who || 'A participant') + ' lowered their hand.';
+                  box.classList.remove('hidden');
+                }
               }
+              refreshClassroomParticipants();
+            });
+            jitsiClassroomApi.addListener('participantJoined', refreshClassroomParticipants);
+            jitsiClassroomApi.addListener('participantLeft', refreshClassroomParticipants);
+            jitsiClassroomApi.addListener('videoConferenceJoined', () => {
+              if (user && user.role !== 'Student') applyClassroomModeToMeeting(mode);
+              refreshClassroomParticipants();
             });
             resolve(true);
           } catch (err) { reject(err); }
@@ -2074,9 +2087,7 @@
             document.getElementById('classroomMeetingMeta').textContent =
               'Lecturer: ' + activeClassroom.lecturerName + ' · Participation: ' +
               (CLASSROOM_MODE_LABELS[mode] || mode);
-            if (mode === 'VIEW_ONLY' || mode === 'RAISE_HAND') {
-              if (jitsiClassroomApi) jitsiClassroomApi.executeCommand('muteEveryone');
-            }
+            applyClassroomModeToMeeting(mode);
           }
           await refreshView();
         }
@@ -2084,16 +2095,80 @@
       finally { loading(false); }
     }
 
-    function onClassroomMuteAll() {
+    function onClassroomMuteAll(mediaType) {
       if (!jitsiClassroomApi || !activeClassroom || !user || user.role === 'Student') {
         alertMsg('appAlert', 'Lecturer controls are available only while you are hosting a classroom.', 'error');
         return;
       }
       try {
-        jitsiClassroomApi.executeCommand('muteEveryone');
-        alertMsg('appAlert', 'A mute request was sent to all participant microphones. Participants may need to confirm browser or device permissions.', 'success');
+        jitsiClassroomApi.executeCommand('muteEveryone', mediaType === 'video' ? 'video' : 'audio');
+        alertMsg('appAlert', mediaType === 'video' ? 'A camera-mute request was sent to all participants.' : 'A microphone-mute request was sent to all participants.', 'success');
+        refreshClassroomParticipants();
       } catch (err) {
         alertMsg('appAlert', 'The meeting service could not apply the mute command: ' + err.message, 'error');
+      }
+    }
+
+    function applyClassroomModeToMeeting(mode) {
+      if (!jitsiClassroomApi || !user || user.role === 'Student') return;
+      const restricted = mode === 'VIEW_ONLY' || mode === 'RAISE_HAND';
+      const audioModerated = restricted || mode === 'AUDIO_PARTICIPATION';
+      const videoModerated = restricted || mode === 'AUDIO_PARTICIPATION';
+      try {
+        jitsiClassroomApi.executeCommand('toggleModeration', audioModerated, 'audio');
+        jitsiClassroomApi.executeCommand('toggleModeration', videoModerated, 'video');
+        if (restricted || mode === 'AUDIO_PARTICIPATION') {
+          jitsiClassroomApi.executeCommand('muteEveryone', 'audio');
+        }
+        if (restricted || mode === 'AUDIO_PARTICIPATION') {
+          jitsiClassroomApi.executeCommand('muteEveryone', 'video');
+        }
+        refreshClassroomParticipants();
+      } catch (err) {
+        alertMsg('appAlert', 'The meeting service could not update media moderation. Confirm that the lecturer is a meeting moderator. ' + err.message, 'error');
+      }
+    }
+
+    async function refreshClassroomParticipants() {
+      const box = document.getElementById('classroomParticipantsBox');
+      if (!box || !jitsiClassroomApi) return;
+      try {
+        const result = await jitsiClassroomApi.getRoomsInfo();
+        const rooms = result && result.rooms ? result.rooms : [];
+        const participants = rooms.reduce((all, room) => all.concat(room.participants || []), []);
+        if (!participants.length) {
+          box.innerHTML = '<p class="text-muted">No other participants have joined yet.</p>';
+          return;
+        }
+        box.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Participant</th><th>Microphone</th><th>Camera</th><th>Lecturer actions</th></tr></thead><tbody>' +
+          participants.map(p => {
+            const id = String(p.id || '');
+            const name = esc(p.displayName || 'Participant');
+            const audio = p.audioMuted ? 'Muted' : 'On';
+            const video = p.videoMuted ? 'Off' : 'On';
+            if (!id) return '';
+            return '<tr><td>' + name + '</td><td>' + audio + '</td><td>' + video + '</td><td>' +
+              '<button type="button" class="btn btn-outline btn-sm" onclick="onClassroomParticipantAction(\'' + esc(id) + '\',\'askAudio\')">Ask to speak</button> ' +
+              '<button type="button" class="btn btn-outline btn-sm" onclick="onClassroomParticipantAction(\'' + esc(id) + '\',\'approveVideo\')">Approve camera</button> ' +
+              '<button type="button" class="btn btn-outline btn-sm" onclick="onClassroomParticipantAction(\'' + esc(id) + '\',\'muteAudio\')">Mute mic</button> ' +
+              '<button type="button" class="btn btn-outline btn-sm" onclick="onClassroomParticipantAction(\'' + esc(id) + '\',\'muteVideo\')">Mute camera</button></td></tr>';
+          }).join('') + '</tbody></table></div>';
+      } catch (err) {
+        box.innerHTML = '<p class="text-muted">Participant details are not available from the meeting service at this time.</p>';
+      }
+    }
+
+    function onClassroomParticipantAction(participantID, action) {
+      if (!jitsiClassroomApi || !activeClassroom || !user || user.role === 'Student') return;
+      try {
+        if (action === 'askAudio') jitsiClassroomApi.executeCommand('askToUnmute', participantID);
+        else if (action === 'approveVideo') jitsiClassroomApi.executeCommand('approveVideo', participantID);
+        else if (action === 'muteAudio') jitsiClassroomApi.executeCommand('muteRemoteParticipant', participantID, 'audio');
+        else if (action === 'muteVideo') jitsiClassroomApi.executeCommand('muteRemoteParticipant', participantID, 'video');
+        alertMsg('appAlert', 'The participant request was sent to the meeting service.', 'success');
+        setTimeout(refreshClassroomParticipants, 800);
+      } catch (err) {
+        alertMsg('appAlert', 'The participant action could not be completed: ' + err.message, 'error');
       }
     }
 
