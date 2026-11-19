@@ -1672,7 +1672,9 @@ function doPost(e) {
       joinClassroom: joinClassroom,
       leaveClassroom: leaveClassroom,
       updateClassroomParticipation: updateClassroomParticipation,
-      endClassroom: endClassroom
+      endClassroom: endClassroom,
+      submitClassroomQuestion: submitClassroomQuestion,
+      getClassroomQuestions: getClassroomQuestions
     };
 
     if (!Object.prototype.hasOwnProperty.call(ROUTES, fn)) {
@@ -1766,6 +1768,9 @@ function upgradeSystem311Classroom() {
     ]],
     [V11_CLASSROOM_EVENTS_SHEET, [
       'EventID','SessionID','UserID','UserName','UserRole','EventType','OccurredAt'
+    ]],
+    ['V11_ClassroomQuestions', [
+      'QuestionID','SessionID','CourseID','UserID','UserName','UserRole','Question','SubmittedAt','Status'
     ]]
   ];
   const created = [];
@@ -1867,10 +1872,7 @@ function getClassrooms(token, courseID) {
   const user = requireUser_(token);
   let rows = getRows_(V11_CLASSROOMS_SHEET);
   if (user.role === 'Student') {
-    const enrolled = new Set(getRows_(SHEETS.ENROLMENTS)
-      .filter(e => normaliseMatric_(e.matricno) === normaliseMatric_(user.userID))
-      .map(e => String(e.courseid)));
-    rows = rows.filter(r => enrolled.has(String(r.courseid)));
+    rows = rows.filter(r => isStudentEnrolled_(user.userID, r.courseid));
   } else if (user.role === 'Lecturer') {
     const assigned = getLecturerCourseIds_(user.userID);
     rows = rows.filter(r => assigned.has(String(r.courseid)));
@@ -1924,6 +1926,34 @@ function updateClassroomParticipation(token, sessionID, participationMode) {
   const sh = v11ClassroomSheet_(V11_CLASSROOMS_SHEET);
   setCellByHeader_(V11_CLASSROOMS_SHEET, classroom._row, 'ParticipationMode', mode);
   return {success:true,participationMode:mode,message:'Student participation settings updated.'};
+}
+
+
+function submitClassroomQuestion(token, sessionID, questionText) {
+  const user = requireUser_(token);
+  const classroom = v11FindClassroom_(sessionID);
+  v11CanAccessClassroom_(user, classroom);
+  if (String(classroom.status).toUpperCase() !== 'LIVE') throw new Error('This classroom is no longer accepting questions.');
+  const question = String(questionText || '').replace(/\\s+/g, ' ').trim().slice(0,1200);
+  if (!question) throw new Error('Enter a question before submitting.');
+  const sh = v11ClassroomSheet_('V11_ClassroomQuestions');
+  const submittedAt = new Date().toISOString();
+  const questionID = makeId_('QST');
+  sh.appendRow([questionID, classroom.sessionid, classroom.courseid, user.userID, user.name, user.role, question, submittedAt, 'SUBMITTED']);
+  return {success:true, questionID:questionID, submittedAt:submittedAt, message:'Your question has been recorded for the lecturer.'};
+}
+
+function getClassroomQuestions(token, sessionID) {
+  const user = requireUser_(token);
+  const classroom = v11FindClassroom_(sessionID);
+  v11CanAccessClassroom_(user, classroom);
+  const rows = getRows_('V11_ClassroomQuestions').filter(r => String(r.sessionid) === String(classroom.sessionid));
+  const visible = user.role === 'Student' ? rows.filter(r => String(r.userid) === String(user.userID)) : rows;
+  visible.sort((a,b) => String(a.submittedat).localeCompare(String(b.submittedat)));
+  return {success:true, questions:visible.map(r => ({
+    questionID:r.questionid, userName:r.username, userRole:r.userrole,
+    question:r.question, submittedAt:r.submittedat, status:r.status
+  }))};
 }
 
 function endClassroom(token, sessionID) {
