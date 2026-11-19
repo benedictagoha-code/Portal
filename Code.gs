@@ -2138,8 +2138,8 @@ function createClassroomPoll(token, sessionID, questionText, optionTexts) {
   const classroom = v11FindClassroom_(sessionID);
   requireCourseAccess_(user, classroom.courseid);
   if (String(classroom.status).toUpperCase() !== 'LIVE') throw new Error('A poll can only be created during a live lecture.');
-  const question = String(questionText || '').replace(/\\s+/g,' ').trim().slice(0,300);
-  const options = Array.isArray(optionTexts) ? optionTexts.map(x=>String(x||'').replace(/\\s+/g,' ').trim().slice(0,120)).filter(Boolean) : [];
+  const question = String(questionText || '').replace(/\s+/g,' ').trim().slice(0,300);
+  const options = Array.isArray(optionTexts) ? optionTexts.map(x=>String(x||'').replace(/\s+/g,' ').trim().slice(0,120)).filter(Boolean) : [];
   if (!question || options.length < 2 || options.length > 4) throw new Error('A poll needs a question and two to four options.');
   if (new Set(options.map(x=>x.toLowerCase())).size !== options.length) throw new Error('Poll options must be different.');
   const sh = v11ClassroomSheet_('V11_ClassroomPolls');
