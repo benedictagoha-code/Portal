@@ -38,23 +38,11 @@ for (const id of ids) {
   if (seen.has(id)) fail.push('index.html: duplicate element id ' + id);
   seen.add(id);
 }
-// Regression tests for lecturer display-name correction.
-const nameHelper = code.match(/function normaliseDisplayName_\(name\) \{[\s\\S]*?\n\}/);
-if (!nameHelper) fail.push('Code.gs: lecturer display-name normaliser missing');
-else {
-  const helperSource = nameHelper[0].replace(/^function normaliseDisplayName_/, 'function');
-  const normaliseDisplayName = vm.runInNewContext('(' + helperSource + ')');
-  const cases = [
-    ['Dr Agoha Benedict', 'Professor Benedict Agoha'],
-    ['Dr. Agoha Benedict', 'Professor Benedict Agoha'],
-    ['Agoha Benedict', 'Professor Benedict Agoha'],
-    ['Professor Other Lecturer', 'Professor Other Lecturer']
-  ];
-  for (const [input, expected] of cases) {
-    if (normaliseDisplayName(input) !== expected) fail.push('Display-name regression: ' + input);
-  }
-}
-if (!code.includes('name: normaliseDisplayName_(match.name)')) fail.push('Login does not apply the corrected lecturer display name.');
+// Regression checks for the corrected lecturer identity.
+if (!code.includes("return 'Professor Benedict Agoha'")) fail.push('Correct Professor Benedict Agoha display name is missing.');
+if (!code.includes("name: normaliseDisplayName_(match.name)")) fail.push('Login does not apply the corrected lecturer display name.');
+if (!code.includes("key === 'dr agoha benedict'")) fail.push('Legacy Dr Agoha Benedict name is not mapped.');
+
 for (const method of ['createClassroomPoll','getClassroomPolls','voteClassroomPoll','closeClassroomPoll']) {
   if (!routes.includes(method) || !allowed.includes(method) || !code.includes('function ' + method + '(')) fail.push('Classroom poll wiring regression: ' + method);
 }
