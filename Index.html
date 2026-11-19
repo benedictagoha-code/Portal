@@ -2044,7 +2044,11 @@
         const res = await api('scheduleClassroom', token, {
           courseID: document.getElementById('classCourse').value,
           title: document.getElementById('classTitle').value.trim(),
-          scheduledAt: document.getElementById('classScheduledAt').value,
+          scheduledAt: (function(value) {
+            if (!value) return '';
+            const localDate = new Date(value);
+            return isFinite(localDate.getTime()) ? localDate.toISOString() : '';
+          })(document.getElementById('classScheduledAt').value),
           participationMode: document.getElementById('classScheduleParticipation').value
         });
         if (!res.success) throw new Error(res.message || 'Could not schedule lecture.');
