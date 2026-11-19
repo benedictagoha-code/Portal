@@ -2103,6 +2103,17 @@
         await loadJitsiClassroom(joined);
         document.getElementById('classroomMeetingCard').scrollIntoView({behavior:'smooth',block:'start'});
       } catch (err) {
+        if (jitsiClassroomApi) {
+          try { jitsiClassroomApi.dispose(); } catch (disposeErr) {}
+          jitsiClassroomApi = null;
+        }
+        await recordClassroomLeave_();
+        const meetingCard = document.getElementById('classroomMeetingCard');
+        if (meetingCard) meetingCard.classList.add('hidden');
+        const lecturerTools = document.getElementById('classroomLecturerTools');
+        if (lecturerTools) lecturerTools.classList.add('hidden');
+        const meetingFrame = document.getElementById('jitsiClassroomFrame');
+        if (meetingFrame) meetingFrame.innerHTML = '';
         alertMsg('appAlert', err.message, 'error');
       } finally { loading(false); }
     }
