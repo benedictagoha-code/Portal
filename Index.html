@@ -1999,15 +1999,15 @@
         const scheduled = status === 'SCHEDULED';
         const safeId = esc(c.sessionID);
         const action = live
-          ? '<button type="button" class="btn btn-primary btn-sm" onclick="onJoinClassroom(\\'' + safeId + '\\')">Join Classroom</button>'
+          ? '<button type="button" class="btn btn-primary btn-sm" onclick="onJoinClassroom(\'' + safeId + '\')">Join Classroom</button>'
           : scheduled && user.role !== 'Student'
-            ? '<button type="button" class="btn btn-primary btn-sm" onclick="onStartScheduledClassroom(\\'' + safeId + '\\')">Start Lecture</button> <button type="button" class="btn btn-outline btn-sm" onclick="onCancelScheduledClassroom(\\'' + safeId + '\\')">Cancel</button>'
+            ? '<button type="button" class="btn btn-primary btn-sm" onclick="onStartScheduledClassroom(\'' + safeId + '\')">Start Lecture</button> <button type="button" class="btn btn-outline btn-sm" onclick="onCancelScheduledClassroom(\'' + safeId + '\')">Cancel</button>'
             : scheduled ? '<span class="text-muted">Waiting for lecturer to start</span>'
             : '<span class="badge b-slate">' + esc(status === 'CANCELLED' ? 'CANCELLED' : 'ENDED') + '</span>';
         const control = live && user.role !== 'Student'
-          ? '<div class="form-group mt-1" style="max-width:330px;"><label>Change participation mode</label><select onchange="onUpdateClassroomMode(\\'' + safeId + '\\',this.value)">' +
+          ? '<div class="form-group mt-1" style="max-width:330px;"><label>Change participation mode</label><select onchange="onUpdateClassroomMode(\'' + safeId + '\',this.value)">' +
             Object.keys(CLASSROOM_MODE_LABELS).map(k => '<option value="' + k + '"' + (k === c.participationMode ? ' selected' : '') + '>' + CLASSROOM_MODE_LABELS[k] + '</option>').join('') +
-            '</select><button type="button" class="btn btn-outline btn-sm mt-1" onclick="onEndClassroom(\\'' + safeId + '\\')">End Lecture</button></div>'
+            '</select><button type="button" class="btn btn-outline btn-sm mt-1" onclick="onEndClassroom(\'' + safeId + '\')">End Lecture</button></div>'
           : '';
         const when = scheduled && c.scheduledAt ? '<div class="text-muted">Scheduled: ' + esc(fmtDate(c.scheduledAt)) + '</div>' : '';
         return '<div class="card" style="margin-bottom:0.75rem;"><div class="flex-between"><div><strong>' +
