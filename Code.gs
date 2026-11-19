@@ -1969,7 +1969,7 @@ function getClassroomAttendance(token, sessionID) {
   const totals = new Map();
   events.forEach(e => {
     const uid = String(e.userid || '');
-    if (!uid) return;
+    if (!uid || String(e.userrole || '') !== 'Student') return;
     if (String(e.eventtype) === 'JOIN') {
       const key = String(e.eventid);
       joins.set(key, {uid:uid, name:String(e.username || uid), role:String(e.userrole || ''), at:new Date(e.occurredat).getTime()});
