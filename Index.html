@@ -325,8 +325,16 @@
               </div>
               <button type="button" class="btn btn-danger btn-sm" onclick="onLeaveClassroom()">Leave Classroom</button>
             </div>
+            <div id="classroomLecturerTools" class="hidden mb-2">
+              <div class="flex-between" style="gap:0.5rem;flex-wrap:wrap;">
+                <strong>Lecturer controls</strong>
+                <button type="button" class="btn btn-outline btn-sm" onclick="onClassroomMuteAll()">Mute all student microphones</button>
+              </div>
+              <p class="text-muted mt-1">Use the meeting controls to manage participants. Students can use Raise Hand to request permission to speak. The lecturer can mute participants; students must consent before a lecturer can unmute their microphones.</p>
+            </div>
+            <div id="classroomHandStatus" class="alert alert-success hidden mb-2" aria-live="polite"></div>
             <div id="jitsiClassroomFrame" style="width:100%;min-height:560px;border-radius:10px;overflow:hidden;background:#111827;"></div>
-            <p class="text-muted mt-1">Classroom audio/video is provided by the meeting service. Follow your lecturer's participation instructions.</p>
+            <p class="text-muted mt-1">Classroom audio/video is provided by the meeting service. Camera and microphone permissions are also subject to browser and meeting-service controls.</p>
           </div>
         </section>
 
@@ -1969,6 +1977,7 @@
           'Lecturer: ' + joined.lecturerName + ' · Participation: ' +
           (CLASSROOM_MODE_LABELS[joined.participationMode] || joined.participationMode);
         document.getElementById('classroomMeetingCard').classList.remove('hidden');
+        document.getElementById('classroomLecturerTools').classList.toggle('hidden', user.role === 'Student');
         await loadJitsiClassroom(joined);
         document.getElementById('classroomMeetingCard').scrollIntoView({behavior:'smooth',block:'start'});
       } catch (err) {
@@ -2003,6 +2012,18 @@
             });
             jitsiClassroomApi.addListener('videoConferenceLeft', () => {
               if (activeClassroom) recordClassroomLeave_();
+            });
+            jitsiClassroomApi.addListener('raiseHandUpdated', data => {
+              const box = document.getElementById('classroomHandStatus');
+              if (!box) return;
+              const who = data && (data.name || data.id) ? (data.name || data.id) : 'A participant';
+              if (data && data.handRaised) {
+                box.textContent = who + ' has raised a hand. Please use the participant controls to invite them to speak.';
+                box.classList.remove('hidden');
+              } else {
+                box.textContent = who + ' lowered their hand.';
+                box.classList.remove('hidden');
+              }
             });
             resolve(true);
           } catch (err) { reject(err); }
@@ -2047,9 +2068,33 @@
       try {
         const res = await api('updateClassroomParticipation', token, sessionID, mode);
         alertMsg('appAlert', res.message, res.success ? 'success' : 'error');
-        if (res.success) await refreshView();
+        if (res.success) {
+          if (activeClassroom && activeClassroom.sessionID === sessionID) {
+            activeClassroom.participationMode = mode;
+            document.getElementById('classroomMeetingMeta').textContent =
+              'Lecturer: ' + activeClassroom.lecturerName + ' · Participation: ' +
+              (CLASSROOM_MODE_LABELS[mode] || mode);
+            if (mode === 'VIEW_ONLY' || mode === 'RAISE_HAND') {
+              if (jitsiClassroomApi) jitsiClassroomApi.executeCommand('muteEveryone');
+            }
+          }
+          await refreshView();
+        }
       } catch (err) { alertMsg('appAlert', err.message, 'error'); }
       finally { loading(false); }
+    }
+
+    function onClassroomMuteAll() {
+      if (!jitsiClassroomApi || !activeClassroom || !user || user.role === 'Student') {
+        alertMsg('appAlert', 'Lecturer controls are available only while you are hosting a classroom.', 'error');
+        return;
+      }
+      try {
+        jitsiClassroomApi.executeCommand('muteEveryone');
+        alertMsg('appAlert', 'A mute request was sent to all participant microphones. Participants may need to confirm browser or device permissions.', 'success');
+      } catch (err) {
+        alertMsg('appAlert', 'The meeting service could not apply the mute command: ' + err.message, 'error');
+      }
     }
 
     async function onEndClassroom(sessionID) {
