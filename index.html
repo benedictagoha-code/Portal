@@ -2108,7 +2108,7 @@
             });
             jitsiClassroomApi.addListener('raiseHandUpdated', data => {
               if (data && data.id) {
-                if (data.handRaised) classroomRaisedHands[String(data.id)] = Number(data.handRaised) || Date.now();
+                if (data.handRaised) classroomRaisedHands[String(data.id)] = Date.now();
                 else delete classroomRaisedHands[String(data.id)];
               }
               if (data && data.id && String(data.id) === String(jitsiLocalParticipantID)) {
