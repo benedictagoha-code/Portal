@@ -2034,6 +2034,10 @@
               if (activeClassroom) recordClassroomLeave_();
             });
             jitsiClassroomApi.addListener('raiseHandUpdated', data => {
+              if (data && data.id) {
+                if (data.handRaised) classroomRaisedHands[String(data.id)] = Number(data.handRaised) || Date.now();
+                else delete classroomRaisedHands[String(data.id)];
+              }
               if (data && data.id && String(data.id) === String(jitsiLocalParticipantID)) {
                 classroomLocalHandRaised = !!data.handRaised;
                 const handButton = document.getElementById('classroomRaiseHandBtn');
@@ -2099,6 +2103,7 @@
       jitsiClassroomIsModerator = false;
       jitsiLocalParticipantID = '';
       classroomLocalHandRaised = false;
+      classroomRaisedHands = Object.create(null);
       const handButton = document.getElementById('classroomRaiseHandBtn');
       if (handButton) handButton.textContent = '✋ Raise Hand';
       await recordClassroomLeave_();
@@ -2127,6 +2132,7 @@
     }
 
     let classroomLocalHandRaised = false;
+    let classroomRaisedHands = Object.create(null);
 
     function onClassroomRaiseHand() {
       if (!jitsiClassroomApi || !activeClassroom) {
@@ -2216,14 +2222,15 @@
           box.innerHTML = '<p class="text-muted">No other participants have joined yet.</p>';
           return;
         }
-        box.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Participant</th><th>Microphone</th><th>Camera</th><th>Lecturer actions</th></tr></thead><tbody>' +
+        box.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Participant</th><th>Hand</th><th>Microphone</th><th>Camera</th><th>Lecturer actions</th></tr></thead><tbody>' +
           participants.filter(p => String(p.id || '') !== String(jitsiLocalParticipantID)).map(p => {
             const id = String(p.id || '');
             const name = esc(p.displayName || 'Participant');
+            const hand = classroomRaisedHands[id] ? '<strong style="color:var(--warning,#b45309);">✋ Raised</strong>' : '—';
             const audio = p.audioMuted ? 'Muted' : 'On';
             const video = p.videoMuted ? 'Off' : 'On';
             if (!id) return '';
-            return '<tr><td>' + name + '</td><td>' + audio + '</td><td>' + video + '</td><td>' +
+            return '<tr><td>' + name + '</td><td>' + hand + '</td><td>' + audio + '</td><td>' + video + '</td><td>' +
               '<button type="button" class="btn btn-outline btn-sm" onclick="onClassroomParticipantAction(\'' + esc(id) + '\',\'askAudio\')">Ask to speak</button> ' +
               '<button type="button" class="btn btn-outline btn-sm" onclick="onClassroomParticipantAction(\'' + esc(id) + '\',\'approveVideo\')">Approve camera</button> ' +
               '<button type="button" class="btn btn-outline btn-sm" onclick="onClassroomParticipantAction(\'' + esc(id) + '\',\'muteAudio\')">Mute mic</button> ' +
