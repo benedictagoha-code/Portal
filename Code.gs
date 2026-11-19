@@ -2036,7 +2036,7 @@ function submitClassroomQuestion(token, sessionID, questionText) {
   const classroom = v11FindClassroom_(sessionID);
   v11CanAccessClassroom_(user, classroom);
   if (String(classroom.status).toUpperCase() !== 'LIVE') throw new Error('This classroom is no longer accepting questions.');
-  const question = String(questionText || '').replace(/\\s+/g, ' ').trim().slice(0,1200);
+  const question = String(questionText || '').replace(/\s+/g, ' ').trim().slice(0,1200);
   if (!question) throw new Error('Enter a question before submitting.');
   const sh = v11ClassroomSheet_('V11_ClassroomQuestions');
   const submittedAt = new Date().toISOString();
