@@ -1697,7 +1697,11 @@ function doPost(e) {
       submitClassroomQuestion: submitClassroomQuestion,
       getClassroomQuestions: getClassroomQuestions,
       updateClassroomQuestionStatus: updateClassroomQuestionStatus,
-      getClassroomAttendance: getClassroomAttendance
+      getClassroomAttendance: getClassroomAttendance,
+      createClassroomPoll: createClassroomPoll,
+      getClassroomPolls: getClassroomPolls,
+      voteClassroomPoll: voteClassroomPoll,
+      closeClassroomPoll: closeClassroomPoll
     };
 
     if (!Object.prototype.hasOwnProperty.call(ROUTES, fn)) {
@@ -1794,6 +1798,12 @@ function upgradeSystem311Classroom() {
     ]],
     ['V11_ClassroomQuestions', [
       'QuestionID','SessionID','CourseID','UserID','UserName','UserRole','Question','SubmittedAt','Status'
+    ]],
+    ['V11_ClassroomPolls', [
+      'PollID','SessionID','CourseID','UserID','UserName','Question','OptionsJSON','Status','CreatedAt','ClosedAt'
+    ]],
+    ['V11_ClassroomPollVotes', [
+      'VoteID','PollID','SessionID','UserID','OptionIndex','VotedAt'
     ]]
   ];
   const created = [];
@@ -2122,6 +2132,72 @@ function updateClassroomQuestionStatus(token, sessionID, questionID, status) {
   return {success:true,status:next,message:next === 'ANSWERED' ? 'Question marked as answered.' : 'Question returned to the submitted list.'};
 }
 
+
+function createClassroomPoll(token, sessionID, questionText, optionTexts) {
+  const user = requireUser_(token, ['Lecturer','Administrator']);
+  const classroom = v11FindClassroom_(sessionID);
+  requireCourseAccess_(user, classroom.courseid);
+  if (String(classroom.status).toUpperCase() !== 'LIVE') throw new Error('A poll can only be created during a live lecture.');
+  const question = String(questionText || '').replace(/\\s+/g,' ').trim().slice(0,300);
+  const options = Array.isArray(optionTexts) ? optionTexts.map(x=>String(x||'').replace(/\\s+/g,' ').trim().slice(0,120)).filter(Boolean) : [];
+  if (!question || options.length < 2 || options.length > 4) throw new Error('A poll needs a question and two to four options.');
+  if (new Set(options.map(x=>x.toLowerCase())).size !== options.length) throw new Error('Poll options must be different.');
+  const sh = v11ClassroomSheet_('V11_ClassroomPolls');
+  const pollID = makeId_('POL');
+  const now = new Date().toISOString();
+  sh.appendRow([pollID,classroom.sessionid,classroom.courseid,user.userID,user.name,question,JSON.stringify(options),'OPEN',now,'']);
+  return {success:true,pollID:pollID,message:'Poll published.'};
+}
+
+function getClassroomPolls(token, sessionID) {
+  const user = requireUser_(token);
+  const classroom = v11FindClassroom_(sessionID);
+  v11CanAccessClassroom_(user,classroom);
+  const polls = getRows_('V11_ClassroomPolls').filter(p=>String(p.sessionid)===String(classroom.sessionid))
+    .sort((a,b)=>String(a.createdat).localeCompare(String(b.createdat)));
+  const votes = getRows_('V11_ClassroomPollVotes');
+  return {success:true,polls:polls.map(p=>{
+    let options=[]; try { options=JSON.parse(p.optionsjson||'[]'); } catch(e) {}
+    const pollVotes=votes.filter(v=>String(v.pollid)===String(p.pollid));
+    const counts=options.map((label,index)=>pollVotes.filter(v=>Number(v.optionindex)===index).length);
+    const total=counts.reduce((a,b)=>a+b,0);
+    const mine=pollVotes.some(v=>String(v.userid)===String(user.userID));
+    return {pollID:p.pollid,question:p.question,status:p.status,hasVoted:mine,totalVotes:total,
+      options:options.map((label,index)=>({text:label,votes:counts[index],percent:total?Math.round(counts[index]*100/total):0}))};
+  })};
+}
+
+function voteClassroomPoll(token, sessionID, pollID, optionIndex) {
+  const user = requireUser_(token,['Student']);
+  const classroom = v11FindClassroom_(sessionID);
+  v11CanAccessClassroom_(user,classroom);
+  if (String(classroom.status).toUpperCase()!=='LIVE') throw new Error('This lecture is no longer live.');
+  const poll = getRows_('V11_ClassroomPolls').find(p=>String(p.pollid)===String(pollID)&&String(p.sessionid)===String(classroom.sessionid));
+  if (!poll) throw new Error('Poll not found.');
+  if (String(poll.status).toUpperCase()!=='OPEN') throw new Error('This poll is closed.');
+  let options=[]; try { options=JSON.parse(poll.optionsjson||'[]'); } catch(e) {}
+  const index=Number(optionIndex);
+  if (!Number.isInteger(index)||index<0||index>=options.length) throw new Error('Choose a valid poll option.');
+  const lock=LockService.getScriptLock(); lock.waitLock(10000);
+  try {
+    const votes=getRows_('V11_ClassroomPollVotes');
+    if (votes.some(v=>String(v.pollid)===String(poll.pollid)&&String(v.userid)===String(user.userID))) throw new Error('You have already voted in this poll.');
+    v11ClassroomSheet_('V11_ClassroomPollVotes').appendRow([makeId_('VOT'),poll.pollid,classroom.sessionid,user.userID,index,new Date().toISOString()]);
+    return {success:true,message:'Your vote has been recorded.'};
+  } finally { lock.releaseLock(); }
+}
+
+function closeClassroomPoll(token, sessionID, pollID) {
+  const user=requireUser_(token,['Lecturer','Administrator']);
+  const classroom=v11FindClassroom_(sessionID);
+  requireCourseAccess_(user,classroom.courseid);
+  const row=getRows_('V11_ClassroomPolls').find(p=>String(p.pollid)===String(pollID)&&String(p.sessionid)===String(classroom.sessionid));
+  if (!row) throw new Error('Poll not found.');
+  if (String(row.status).toUpperCase()==='CLOSED') return {success:true,message:'Poll is already closed.'};
+  setCellByHeader_('V11_ClassroomPolls',row._row,'Status','CLOSED');
+  setCellByHeader_('V11_ClassroomPolls',row._row,'ClosedAt',new Date().toISOString());
+  return {success:true,message:'Poll closed.'};
+}
 
 function getClassroomAttendance(token, sessionID) {
   const user = requireUser_(token, ['Lecturer','Administrator']);
