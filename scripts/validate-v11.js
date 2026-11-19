@@ -39,7 +39,7 @@ for (const id of ids) {
   seen.add(id);
 }
 // Regression tests for lecturer display-name correction.
-const nameHelper = code.match(/function normaliseDisplayName_\\(name\\) \\{[\\s\\S]*?\\n\\}/);
+const nameHelper = code.match(/function normaliseDisplayName_\(name\) \{[\\s\\S]*?\\n\}/);
 if (!nameHelper) fail.push('Code.gs: lecturer display-name normaliser missing');
 else {
   const helperSource = nameHelper[0].replace(/^function normaliseDisplayName_/, 'function');
