@@ -1668,6 +1668,8 @@ function doPost(e) {
       setAllowExternalEmailRecipients: setAllowExternalEmailRecipients,
       sendPortalEmail: sendPortalEmail,
       startClassroom: startClassroom,
+      scheduleClassroom: scheduleClassroom,
+      cancelScheduledClassroom: cancelScheduledClassroom,
       getClassrooms: getClassrooms,
       joinClassroom: joinClassroom,
       leaveClassroom: leaveClassroom,
@@ -1765,7 +1767,7 @@ function upgradeSystem311Classroom() {
   const definitions = [
     [V11_CLASSROOMS_SHEET, [
       'SessionID','RoomName','CourseID','CourseCode','CourseTitle','Title',
-      'LecturerID','LecturerName','ParticipationMode','Status','StartedAt','EndedAt'
+      'LecturerID','LecturerName','ParticipationMode','Status','StartedAt','EndedAt','ScheduledAt','ScheduleStatus'
     ]],
     [V11_CLASSROOM_EVENTS_SHEET, [
       'EventID','SessionID','UserID','UserName','UserRole','EventType','OccurredAt'
@@ -1836,14 +1838,69 @@ function v11CanAccessClassroom_(user, classroom) {
   throw new Error('Your account cannot access the virtual classroom.');
 }
 
-function startClassroom(token, payload) {
+function scheduleClassroom(token, payload) {
   const user = requireUser_(token, ['Lecturer','Administrator']);
   payload = payload || {};
   const course = requireCourseAccess_(user, payload.courseID);
   const title = String(payload.title || '').trim().slice(0,160);
   if (!title) throw new Error('Enter a lecture title or topic.');
+  const scheduledAt = new Date(String(payload.scheduledAt || ''));
+  if (!isFinite(scheduledAt.getTime()) || scheduledAt.getTime() <= Date.now()) {
+    throw new Error('Choose a future date and time for the lecture.');
+  }
   const mode = v11ParticipationMode_(payload.participationMode);
   const sh = v11ClassroomSheet_(V11_CLASSROOMS_SHEET);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const rows = getRows_(V11_CLASSROOMS_SHEET);
+    const duplicate = rows.some(r => String(r.courseid) === String(course.courseid) &&
+      String(r.status).toUpperCase() === 'SCHEDULED' &&
+      Math.abs(new Date(r.scheduledat).getTime() - scheduledAt.getTime()) < 60*60*1000);
+    if (duplicate) throw new Error('A lecture is already scheduled for this course within one hour of that time.');
+    const sessionID = makeId_('CLS');
+    sh.appendRow([
+      sessionID, '', course.courseid, course.coursecode, course.coursetitle,
+      title, user.userID, user.name, mode, 'SCHEDULED', '', '',
+      scheduledAt.toISOString(), 'SCHEDULED'
+    ]);
+    return {success:true,sessionID:sessionID,scheduledAt:scheduledAt.toISOString(),
+      status:'SCHEDULED',message:'Lecture scheduled successfully.'};
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function cancelScheduledClassroom(token, sessionID) {
+  const user = requireUser_(token, ['Lecturer','Administrator']);
+  const classroom = v11FindClassroom_(sessionID);
+  requireCourseAccess_(user, classroom.courseid);
+  if (String(classroom.status).toUpperCase() !== 'SCHEDULED') {
+    throw new Error('Only a scheduled lecture can be cancelled.');
+  }
+  setCellByHeader_(V11_CLASSROOMS_SHEET, classroom._row, 'Status', 'CANCELLED');
+  setCellByHeader_(V11_CLASSROOMS_SHEET, classroom._row, 'ScheduleStatus', 'CANCELLED');
+  return {success:true,message:'Scheduled lecture cancelled.'};
+}
+
+function startClassroom(token, payload) {
+  const user = requireUser_(token, ['Lecturer','Administrator']);
+  payload = payload || {};
+  let course, title, mode, sh;
+  if (payload.sessionID) {
+    const scheduled = v11FindClassroom_(payload.sessionID);
+    requireCourseAccess_(user, scheduled.courseid);
+    if (String(scheduled.status).toUpperCase() !== 'SCHEDULED') throw new Error('This lecture is not awaiting start.');
+    course = requireCourseAccess_(user, scheduled.courseid);
+    title = scheduled.title;
+    mode = v11ParticipationMode_(scheduled.participationmode);
+  } else {
+    course = requireCourseAccess_(user, payload.courseID);
+    title = String(payload.title || '').trim().slice(0,160);
+    if (!title) throw new Error('Enter a lecture title or topic.');
+    mode = v11ParticipationMode_(payload.participationMode);
+  }
+  sh = v11ClassroomSheet_(V11_CLASSROOMS_SHEET);
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
@@ -1851,13 +1908,23 @@ function startClassroom(token, payload) {
       String(r.courseid) === String(course.courseid) && String(r.status).toUpperCase() === 'LIVE'
     );
     if (active) throw new Error('A live classroom is already open for this course.');
-    const sessionID = makeId_('CLS');
+    const sessionID = payload.sessionID || makeId_('CLS');
     const roomName = 'psycUNIDEL-' + Utilities.getUuid().replace(/-/g,'');
     const now = new Date().toISOString();
-    sh.appendRow([
-      sessionID, roomName, course.courseid, course.coursecode, course.coursetitle,
-      title, user.userID, user.name, mode, 'LIVE', now, ''
-    ]);
+    if (payload.sessionID) {
+      const scheduled = v11FindClassroom_(sessionID);
+      setCellByHeader_(V11_CLASSROOMS_SHEET, scheduled._row, 'RoomName', roomName);
+      setCellByHeader_(V11_CLASSROOMS_SHEET, scheduled._row, 'Status', 'LIVE');
+      setCellByHeader_(V11_CLASSROOMS_SHEET, scheduled._row, 'StartedAt', now);
+      setCellByHeader_(V11_CLASSROOMS_SHEET, scheduled._row, 'LecturerID', user.userID);
+      setCellByHeader_(V11_CLASSROOMS_SHEET, scheduled._row, 'LecturerName', user.name);
+      setCellByHeader_(V11_CLASSROOMS_SHEET, scheduled._row, 'ScheduleStatus', 'STARTED');
+    } else {
+      sh.appendRow([
+        sessionID, roomName, course.courseid, course.coursecode, course.coursetitle,
+        title, user.userID, user.name, mode, 'LIVE', now, '', '', ''
+      ]);
+    }
     return {
       success:true, sessionID:sessionID, roomName:roomName,
       courseID:course.courseid, courseCode:course.coursecode, courseTitle:course.coursetitle,
@@ -1884,7 +1951,7 @@ function getClassrooms(token, courseID) {
     sessionID:r.sessionid, courseID:r.courseid, courseCode:r.coursecode,
     courseTitle:r.coursetitle, title:r.title, lecturerName:r.lecturername,
     participationMode:r.participationmode, status:r.status,
-    startedAt:r.startedat, endedAt:r.endedat
+    startedAt:r.startedat, endedAt:r.endedat, scheduledAt:r.scheduledat || '', scheduleStatus:r.schedulestatus || ''
   }))};
 }
 
