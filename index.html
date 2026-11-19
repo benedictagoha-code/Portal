@@ -851,6 +851,15 @@
       return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
+    function safeResourceHref(value) {
+      const raw = String(value == null ? '' : value).trim();
+      if (!raw || raw.length > 2048) return '';
+      try {
+        const parsed = new URL(raw, window.location.href);
+        return (parsed.protocol === 'https:' || parsed.protocol === 'http:') ? parsed.href : '';
+      } catch (err) { return ''; }
+    }
+
     function fmtDate(val) {
       if (!val) return '-';
       const d = new Date(val);
@@ -1122,7 +1131,7 @@
           const list = mRes.materials || [];
           document.getElementById('materialsBox').innerHTML = list.length
             ? `<table><thead><tr><th>Course</th><th>Title</th><th>Type</th><th>By</th><th>Link</th></tr></thead><tbody>${
-                list.map(m => `<tr><td><strong>${esc(m.coursecode)}</strong></td><td>${esc(m.title)}</td><td><span class="badge b-slate">${esc(m.materialtype)}</span></td><td>${esc(m.uploadedby)}</td><td><a class="btn btn-outline btn-sm" href="${esc(m.fileurl)}" target="_blank">Open</a></td></tr>`).join('')
+                list.map(m => `<tr><td><strong>${esc(m.coursecode)}</strong></td><td>${esc(m.title)}</td><td><span class="badge b-slate">${esc(m.materialtype)}</span></td><td>${esc(m.uploadedby)}</td><td><a class="btn btn-outline btn-sm" href="${esc(safeResourceHref(m.fileurl))}" target="_blank" rel="noopener noreferrer" ${safeResourceHref(m.fileurl) ? '' : 'aria-disabled="true" onclick="return false"'}>Open</a></td></tr>`).join('')
               }</tbody></table>`
             : '<p class="text-muted">No course materials uploaded yet.</p>';
         }
