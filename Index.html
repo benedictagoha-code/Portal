@@ -2246,7 +2246,28 @@
           const body = document.createElement('p');
           body.style.margin = '0.35rem 0 0';
           body.textContent = item.question || '';
-          entry.append(meta, body);
+          const status = document.createElement('small');
+          status.className = 'text-muted';
+          status.textContent = 'Status: ' + (item.status || 'SUBMITTED');
+          entry.append(meta, body, status);
+          if (item.status !== 'ANSWERED') {
+            const action = document.createElement('button');
+            action.type = 'button';
+            action.className = 'btn btn-sm btn-outline mt-1';
+            action.textContent = 'Mark answered';
+            action.addEventListener('click', async () => {
+              action.disabled = true;
+              try {
+                const changed = await api('updateClassroomQuestionStatus', token, activeClassroom.sessionID, item.questionID, 'ANSWERED');
+                if (!changed || !changed.success) throw new Error(changed && changed.message || 'Unable to update question.');
+                await refreshClassroomQuestions();
+              } catch (err) {
+                action.disabled = false;
+                alertMsg('appAlert', err.message, 'error');
+              }
+            });
+            entry.appendChild(action);
+          }
           list.appendChild(entry);
         });
         box.appendChild(list);
