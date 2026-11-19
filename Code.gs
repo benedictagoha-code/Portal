@@ -570,13 +570,36 @@ function getCourseRoster(token, courseID) {
    ============================================================ */
 function uploadMaterial(token, payload) {
   const user = requireUser_(token, ['Lecturer', 'Administrator']);
+  payload = payload || {};
   const crs = requireCourseAccess_(user, payload.courseID);
+  const title = String(payload.title || '').trim();
+  if (!title || title.length > 200) throw new Error('Enter a title of no more than 200 characters.');
 
   let fileUrl = String(payload.externalLink || '').trim();
-  if (payload.base64Data && payload.fileName) {
+  if (fileUrl) {
+    if (fileUrl.length > 2048 || !/^https?:\/\//i.test(fileUrl)) {
+      throw new Error('External resource links must be valid HTTP or HTTPS URLs.');
+    }
+    let parsed;
+    try { parsed = new URL(fileUrl); } catch (err) { throw new Error('The external resource link is not valid.'); }
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      throw new Error('Only HTTP and HTTPS resource links are allowed.');
+    }
+  }
+
+  if (payload.base64Data || payload.fileName) {
+    if (!payload.base64Data || !payload.fileName) throw new Error('The uploaded file data is incomplete.');
+    const encoded = String(payload.base64Data);
+    if (encoded.length > 28 * 1024 * 1024) throw new Error('Direct uploads are limited to 20 MB. Use an approved cloud link for larger media.');
+    const bytes = Utilities.base64Decode(encoded);
+    if (bytes.length > 20 * 1024 * 1024) throw new Error('Direct uploads are limited to 20 MB. Use an approved cloud link for larger media.');
+    const safeName = String(payload.fileName).replace(/[\\\\/:*?"<>|\\r\\n]/g, '_').slice(0, 180);
+    const allowed = /\\.(pdf|doc|docx|ppt|pptx|mp4|webm|mov|mp3|wav|m4a)$/i;
+    if (!allowed.test(safeName)) throw new Error('Unsupported file type. Upload PDF, Office, video or audio files only.');
     const folderId = PropertiesService.getScriptProperties().getProperty(PROP_DRIVE_ID);
+    if (!folderId) throw new Error('Courseware storage is not configured. Contact the system administrator.');
     const folder = DriveApp.getFolderById(folderId);
-    const blob = Utilities.newBlob(Utilities.base64Decode(payload.base64Data), payload.mimeType || 'application/octet-stream', payload.fileName);
+    const blob = Utilities.newBlob(bytes, String(payload.mimeType || 'application/octet-stream').slice(0, 120), safeName);
     const file = folder.createFile(blob);
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
     fileUrl = file.getUrl();
@@ -584,8 +607,8 @@ function uploadMaterial(token, payload) {
   if (!fileUrl) return { success: false, message: 'Attach a file or enter an external link.' };
 
   getDB_().getSheetByName(SHEETS.MATERIALS).appendRow([
-    makeId_('MAT'), crs.courseid, crs.coursecode, payload.title, payload.materialType || 'Lecture Note',
-    payload.description || '', fileUrl, user.name, new Date().toISOString()
+    makeId_('MAT'), crs.courseid, crs.coursecode, title, String(payload.materialType || 'Lecture Note').slice(0, 80),
+    String(payload.description || '').slice(0, 2000), fileUrl, user.name, new Date().toISOString()
   ]);
   return { success: true, message: 'Course material published.' };
 }
