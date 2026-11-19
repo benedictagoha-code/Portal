@@ -2133,16 +2133,18 @@
       }
     }
 
-    function onClassroomAskQuestion() {
+    async function onClassroomAskQuestion() {
       if (!jitsiClassroomApi || !activeClassroom) return;
       const question = prompt('Enter your question for the lecturer:');
       if (!question || !question.trim()) return;
       try {
-        jitsiClassroomApi.executeCommand('sendChatMessage', 'QUESTION: ' + question.trim());
+        const saved = await api('submitClassroomQuestion', token, activeClassroom.sessionID, question.trim());
+        if (!saved || !saved.success) throw new Error(saved && saved.message ? saved.message : 'The question could not be recorded.');
+        try { jitsiClassroomApi.executeCommand('sendChatMessage', 'QUESTION: ' + question.trim()); } catch (chatErr) {}
         const hint = document.getElementById('classroomInteractionHint');
-        if (hint) hint.textContent = 'Your question has been sent to the live classroom chat.';
+        if (hint) hint.textContent = 'Your question has been recorded and sent to the live classroom chat.';
       } catch (err) {
-        alertMsg('appAlert', 'Your question could not be sent: ' + err.message, 'error');
+        alertMsg('appAlert', 'Your question could not be recorded: ' + err.message, 'error');
       }
     }
 
