@@ -333,6 +333,7 @@
                   <button type="button" class="btn btn-outline btn-sm" onclick="onClassroomMuteAll('video')">Mute all cameras</button>
                   <button type="button" class="btn btn-outline btn-sm" onclick="refreshClassroomParticipants()">Refresh participants</button>
                   <button type="button" class="btn btn-outline btn-sm" onclick="refreshClassroomQuestions()">View student questions</button>
+                  <button type="button" class="btn btn-outline btn-sm" onclick="refreshClassroomAttendance()">View attendance</button>
                 </div>
               </div>
               <p class="text-muted mt-1">Use the selected participation mode to control who may speak or use cameras. Individual approval requests appear below. Students must consent before their microphones or cameras can be enabled.</p>
@@ -2133,6 +2134,44 @@
       } catch (err) {
         alertMsg('appAlert', 'The classroom chat could not be opened: ' + err.message, 'error');
       }
+    }
+
+    async function refreshClassroomAttendance() {
+      const box = document.getElementById('classroomQuestionsBox');
+      if (!box || !activeClassroom || !user || user.role === 'Student') return;
+      box.textContent = 'Loading classroom attendance...';
+      try {
+        const result = await api('getClassroomAttendance', token, activeClassroom.sessionID);
+        if (!result || !result.success) throw new Error('Attendance could not be loaded.');
+        box.replaceChildren();
+        const heading = document.createElement('strong');
+        heading.textContent = 'Virtual classroom participation (' + result.attendance.length + ')';
+        box.appendChild(heading);
+        const note = document.createElement('p');
+        note.className = 'text-muted';
+        note.textContent = result.note;
+        box.appendChild(note);
+        if (!result.attendance.length) {
+          const empty = document.createElement('p');
+          empty.textContent = 'No completed or active participant visits have been recorded.';
+          box.appendChild(empty);
+          return;
+        }
+        const table = document.createElement('table');
+        table.className = 'table';
+        const head = document.createElement('thead');
+        const trh = document.createElement('tr');
+        ['Participant','Role','Visits','Minutes'].forEach(label => { const th=document.createElement('th'); th.textContent=label; trh.appendChild(th); });
+        head.appendChild(trh);
+        const body = document.createElement('tbody');
+        result.attendance.forEach(row => {
+          const tr=document.createElement('tr');
+          [row.name,row.role,String(row.visits),String(row.minutes)].forEach(value => { const td=document.createElement('td'); td.textContent=value; tr.appendChild(td); });
+          body.appendChild(tr);
+        });
+        table.append(head,body);
+        const wrap=document.createElement('div'); wrap.className='table-wrap'; wrap.appendChild(table); box.appendChild(wrap);
+      } catch (err) { box.textContent = 'Attendance could not be loaded: ' + err.message; }
     }
 
     async function refreshClassroomQuestions() {
