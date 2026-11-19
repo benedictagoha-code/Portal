@@ -1955,6 +1955,8 @@
           'Lecturer: ' + joined.lecturerName + ' · Participation: ' +
           (CLASSROOM_MODE_LABELS[joined.participationMode] || joined.participationMode);
         document.getElementById('classroomMeetingCard').classList.remove('hidden');
+        const lecturerTools = document.getElementById('classroomLecturerTools');
+        if (lecturerTools) lecturerTools.classList.toggle('hidden', !user || user.role === 'Student');
         await loadJitsiClassroom(joined);
         document.getElementById('classroomMeetingCard').scrollIntoView({behavior:'smooth',block:'start'});
       } catch (err) {
@@ -2067,6 +2069,8 @@
       if (handButton) handButton.textContent = '✋ Raise Hand';
       await recordClassroomLeave_();
       document.getElementById('classroomMeetingCard').classList.add('hidden');
+      const lecturerTools = document.getElementById('classroomLecturerTools');
+      if (lecturerTools) lecturerTools.classList.add('hidden');
       document.getElementById('jitsiClassroomFrame').innerHTML = '';
       await refreshView();
     }
@@ -2190,12 +2194,13 @@
           jitsiClassroomIsModerator = selfParticipant.role === 'moderator';
           if (becameModerator && activeClassroom) applyClassroomModeToMeeting(activeClassroom.participationMode);
         }
-        if (!participants.length) {
+        const otherParticipants = participants.filter(p => String(p.id || '') !== String(jitsiLocalParticipantID));
+        if (!otherParticipants.length) {
           box.innerHTML = '<p class="text-muted">No other participants have joined yet.</p>';
           return;
         }
         box.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Participant</th><th>Hand</th><th>Microphone</th><th>Camera</th><th>Lecturer actions</th></tr></thead><tbody>' +
-          participants.filter(p => String(p.id || '') !== String(jitsiLocalParticipantID)).map(p => {
+          otherParticipants.map(p => {
             const id = String(p.id || '');
             const name = esc(p.displayName || 'Participant');
             const hand = classroomRaisedHands[id] ? '<strong style="color:var(--warning,#b45309);">✋ Raised</strong>' : '—';
