@@ -1964,43 +1964,55 @@ function getClassroomAttendance(token, sessionID) {
   requireCourseAccess_(user, classroom.courseid);
   const events = getRows_(V11_CLASSROOM_EVENTS_SHEET)
     .filter(e => String(e.sessionid) === String(classroom.sessionid))
-    .sort((a,b) => String(a.occurredat).localeCompare(String(b.occurredat)));
-  const joins = new Map();
+    .sort((a,b) => new Date(a.occurredat).getTime() - new Date(b.occurredat).getTime());
+  const open = new Map();
   const totals = new Map();
   events.forEach(e => {
     const uid = String(e.userid || '');
     if (!uid || String(e.userrole || '') !== 'Student') return;
     if (String(e.eventtype) === 'JOIN') {
-      const key = String(e.eventid);
-      joins.set(key, {uid:uid, name:String(e.username || uid), role:String(e.userrole || ''), at:new Date(e.occurredat).getTime()});
-    } else if (String(e.eventtype).indexOf('LEAVE:') === 0) {
+      const key = String(e.eventid || '');
+      if (key) open.set(key, {uid:uid, name:String(e.username || uid), at:new Date(e.occurredat).getTime()});
+      return;
+    }
+    if (String(e.eventtype || '').indexOf('LEAVE:') === 0) {
       const key = String(e.eventtype).slice(6);
-      const start = joins.get(key);
-      if (!start || start.uid !== uid) return;
-      const end = new Date(e.occurredat).getTime();
-      const duration = Math.max(0, Math.min(24*60*60*1000, end - start.at));
-      const prior = totals.get(uid) || {userID:uid, name:start.name, role:start.role, minutes:0, visits:0};
-      prior.minutes += duration / 60000;
-      prior.visits++;
-      totals.set(uid, prior);
-      joins.delete(key);
+      const visit = open.get(key);
+      if (!visit || visit.uid !== uid) return;
+      const finish = new Date(e.occurredat).getTime();
+      if (isFinite(visit.at) && isFinite(finish) && finish >= visit.at) {
+        const row = totals.get(uid) || {userID:uid,name:visit.name,minutes:0,visits:0};
+        row.minutes += Math.min(24*60*60*1000,finish-visit.at)/60000;
+        row.visits++;
+        totals.set(uid,row);
+      }
+      open.delete(key);
     }
   });
-  const now = Date.now();
-  joins.forEach(start => {
-    if (String(classroom.status).toUpperCase() !== 'LIVE' || !isFinite(start.at)) return;
-    const duration = Math.max(0, Math.min(24*60*60*1000, now - start.at));
-    const prior = totals.get(start.uid) || {userID:start.uid, name:start.name, role:start.role, minutes:0, visits:0};
-    prior.minutes += duration / 60000;
-    prior.visits++;
-    totals.set(start.uid, prior);
+  const live = String(classroom.status).toUpperCase() === 'LIVE';
+  const cutoff = live ? Date.now() : new Date(classroom.endedat).getTime();
+  open.forEach(visit => {
+    if (!isFinite(visit.at) || !isFinite(cutoff) || cutoff < visit.at) return;
+    const row = totals.get(visit.uid) || {userID:visit.uid,name:visit.name,minutes:0,visits:0};
+    row.minutes += Math.min(24*60*60*1000,cutoff-visit.at)/60000;
+    row.visits++;
+    totals.set(visit.uid,row);
+  });
+  // Include every currently enrolled student, including those with no recorded visit.
+  getRows_(SHEETS.ENROLMENTS).filter(e => String(e.courseid) === String(classroom.courseid)).forEach(e => {
+    const uid = String(e.matricno || e.studentid || '');
+    if (!uid) return;
+    const key = normaliseMatric_(uid);
+    const existingKey = Array.from(totals.keys()).find(x => normaliseMatric_(x) === key);
+    if (existingKey) return;
+    totals.set(uid,{userID:uid,name:String(e.studentname || uid),minutes:0,visits:0});
   });
   const rows = Array.from(totals.values()).map(x => ({
-    userID:x.userID, name:x.name, role:x.role, visits:x.visits,
-    minutes:Math.round(x.minutes*10)/10
+    userID:x.userID,name:x.name,visits:x.visits,minutes:Math.round(x.minutes*10)/10,
+    participation:x.visits ? 'RECORDED' : 'NO JOIN RECORDED'
   })).sort((a,b) => a.name.localeCompare(b.name));
-  return {success:true, sessionID:classroom.sessionid, status:classroom.status, attendance:rows,
-    note:'This is a virtual-session participation log based on recorded join/leave events, not the official course attendance register.'};
+  return {success:true,sessionID:classroom.sessionid,status:classroom.status,attendance:rows,
+    note:'Virtual classroom join/leave log only. Minutes are estimated from recorded events; this report does not alter the official course attendance register.'};
 }
 
 function endClassroom(token, sessionID) {
