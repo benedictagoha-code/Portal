@@ -1677,6 +1677,7 @@ function doPost(e) {
       endClassroom: endClassroom,
       submitClassroomQuestion: submitClassroomQuestion,
       getClassroomQuestions: getClassroomQuestions,
+      updateClassroomQuestionStatus: updateClassroomQuestionStatus,
       getClassroomAttendance: getClassroomAttendance
     };
 
