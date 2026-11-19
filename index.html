@@ -363,6 +363,22 @@
               <p class="text-muted mt-1" id="classroomInteractionHint" aria-live="polite">Use Raise Hand to request a speaking turn. The lecturer can invite you to speak.</p>
             </div>
             <div id="classroomHandStatus" class="alert alert-success hidden mb-2" aria-live="polite"></div>
+            <div class="card mb-2" id="classroomPollPanel">
+              <div class="flex-between"><strong>Live class poll</strong><button type="button" class="btn btn-outline btn-sm" onclick="refreshClassroomPolls()">Refresh polls</button></div>
+              <div id="classroomPollCreate" class="hidden mt-1">
+                <form onsubmit="onCreateClassroomPoll(event)">
+                  <div class="form-group"><label>Poll question *</label><input id="classroomPollQuestion" maxlength="300" required placeholder="Ask a question about the lecture"></div>
+                  <div class="form-grid">
+                    <div class="form-group"><label>Option 1 *</label><input id="classroomPollOption1" maxlength="120" required></div>
+                    <div class="form-group"><label>Option 2 *</label><input id="classroomPollOption2" maxlength="120" required></div>
+                    <div class="form-group"><label>Option 3</label><input id="classroomPollOption3" maxlength="120"></div>
+                    <div class="form-group"><label>Option 4</label><input id="classroomPollOption4" maxlength="120"></div>
+                  </div>
+                  <button class="btn btn-primary btn-sm" type="submit">Publish poll</button>
+                </form>
+              </div>
+              <div id="classroomPollsBox" class="mt-1" aria-live="polite"><p class="text-muted">Polls will appear here during the lecture.</p></div>
+            </div>
             <div id="jitsiClassroomFrame" style="width:100%;min-height:560px;border-radius:10px;overflow:hidden;background:#111827;"></div>
             <p class="text-muted mt-1">Classroom audio/video is provided by the meeting service. Camera and microphone permissions are also subject to browser and meeting-service controls.</p>
             <p class="text-warning mt-1"><strong>Development service:</strong> This build currently uses public meet.jit.si rooms for testing. Before confidential or production teaching, connect a private authenticated Jitsi/JaaS deployment; portal sign-in alone does not secure a public meeting room.</p>
@@ -2063,7 +2079,10 @@
         document.getElementById('classroomMeetingCard').classList.remove('hidden');
         const lecturerTools = document.getElementById('classroomLecturerTools');
         if (lecturerTools) lecturerTools.classList.toggle('hidden', !user || user.role === 'Student');
+        const pollCreate = document.getElementById('classroomPollCreate');
+        if (pollCreate) pollCreate.classList.toggle('hidden', !user || user.role === 'Student');
         await loadJitsiClassroom(joined);
+        await refreshClassroomPolls();
         document.getElementById('classroomMeetingCard').scrollIntoView({behavior:'smooth',block:'start'});
       } catch (err) {
         if (jitsiClassroomApi) {
@@ -2352,6 +2371,76 @@
       } catch (err) {
         alertMsg('appAlert', 'Your question could not be recorded: ' + err.message, 'error');
       }
+    }
+
+    async function onCreateClassroomPoll(event) {
+      if (event) event.preventDefault();
+      if (!activeClassroom || !user || user.role === 'Student') return;
+      const question = document.getElementById('classroomPollQuestion').value.trim();
+      const options = [1,2,3,4].map(n => document.getElementById('classroomPollOption'+n).value.trim()).filter(Boolean);
+      if (!question || options.length < 2) { alertMsg('appAlert','Enter a question and at least two options.','error'); return; }
+      loading(true,'Publishing class poll...');
+      try {
+        const result = await api('createClassroomPoll',token,activeClassroom.sessionID,question,options);
+        if (!result || !result.success) throw new Error(result && result.message || 'Poll could not be published.');
+        document.getElementById('classroomPollQuestion').value = '';
+        [1,2,3,4].forEach(n => document.getElementById('classroomPollOption'+n).value = '');
+        await refreshClassroomPolls();
+        alertMsg('appAlert','Poll published to the live classroom.','success');
+      } catch(err) { alertMsg('appAlert',err.message,'error'); }
+      finally { loading(false); }
+    }
+
+    async function onVoteClassroomPoll(pollID, optionIndex, button) {
+      if (!activeClassroom) return;
+      button.disabled = true;
+      try {
+        const result = await api('voteClassroomPoll',token,activeClassroom.sessionID,pollID,optionIndex);
+        if (!result || !result.success) throw new Error(result && result.message || 'Your vote could not be recorded.');
+        await refreshClassroomPolls();
+      } catch(err) { button.disabled = false; alertMsg('appAlert',err.message,'error'); }
+    }
+
+    async function onCloseClassroomPoll(pollID) {
+      if (!activeClassroom || !user || user.role === 'Student') return;
+      if (!confirm('Close this poll? Students will no longer be able to vote.')) return;
+      try {
+        const result = await api('closeClassroomPoll',token,activeClassroom.sessionID,pollID);
+        if (!result || !result.success) throw new Error(result && result.message || 'Poll could not be closed.');
+        await refreshClassroomPolls();
+      } catch(err) { alertMsg('appAlert',err.message,'error'); }
+    }
+
+    async function refreshClassroomPolls() {
+      const box = document.getElementById('classroomPollsBox');
+      if (!box || !activeClassroom) return;
+      try {
+        const result = await api('getClassroomPolls',token,activeClassroom.sessionID);
+        if (!result || !result.success) throw new Error(result && result.message || 'Polls could not be loaded.');
+        box.replaceChildren();
+        if (!result.polls.length) {
+          const empty=document.createElement('p'); empty.className='text-muted'; empty.textContent='No polls have been published yet.'; box.appendChild(empty); return;
+        }
+        result.polls.forEach(poll => {
+          const card=document.createElement('div'); card.className='card mb-1'; card.style.padding='0.75rem';
+          const heading=document.createElement('strong'); heading.textContent=poll.question; card.appendChild(heading);
+          const meta=document.createElement('p'); meta.className='text-muted'; meta.textContent=(poll.status==='OPEN'?'Voting is open':'Poll closed')+' · '+poll.totalVotes+' vote(s)'; card.appendChild(meta);
+          poll.options.forEach((option,index) => {
+            const line=document.createElement('div'); line.style.marginTop='0.45rem';
+            const label=document.createElement('div'); label.textContent=option.text+' — '+option.votes+' ('+option.percent+'%)'; line.appendChild(label);
+            const bar=document.createElement('div'); bar.style.cssText='height:7px;background:#e2e8f0;border-radius:8px;overflow:hidden;margin-top:3px;';
+            const fill=document.createElement('div'); fill.style.cssText='height:100%;width:'+option.percent+'%;background:var(--primary);'; bar.appendChild(fill); line.appendChild(bar);
+            if (poll.status==='OPEN' && user && user.role==='Student' && !poll.hasVoted) {
+              const vote=document.createElement('button'); vote.type='button'; vote.className='btn btn-outline btn-sm mt-1'; vote.textContent='Vote: '+option.text;
+              vote.addEventListener('click',()=>onVoteClassroomPoll(poll.pollID,index,vote)); line.appendChild(vote);
+            }
+            card.appendChild(line);
+          });
+          if (poll.hasVoted && user && user.role==='Student') { const note=document.createElement('p'); note.className='text-muted mt-1'; note.textContent='Your vote has been recorded.'; card.appendChild(note); }
+          if (user && user.role!=='Student' && poll.status==='OPEN') { const close=document.createElement('button'); close.type='button'; close.className='btn btn-outline btn-sm mt-1'; close.textContent='Close poll'; close.addEventListener('click',()=>onCloseClassroomPoll(poll.pollID)); card.appendChild(close); }
+          box.appendChild(card);
+        });
+      } catch(err) { box.textContent='Polls could not be loaded: '+err.message; }
     }
 
     function onClassroomShareScreen() {
