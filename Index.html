@@ -2203,12 +2203,12 @@
         table.className = 'table';
         const head = document.createElement('thead');
         const trh = document.createElement('tr');
-        ['Participant','Role','Visits','Minutes'].forEach(label => { const th=document.createElement('th'); th.textContent=label; trh.appendChild(th); });
+        ['Student','Visits','Minutes','Record'].forEach(label => { const th=document.createElement('th'); th.textContent=label; trh.appendChild(th); });
         head.appendChild(trh);
         const body = document.createElement('tbody');
         result.attendance.forEach(row => {
           const tr=document.createElement('tr');
-          [row.name,row.role,String(row.visits),String(row.minutes)].forEach(value => { const td=document.createElement('td'); td.textContent=value; tr.appendChild(td); });
+          [row.name,String(row.visits),String(row.minutes),row.participation].forEach(value => { const td=document.createElement('td'); td.textContent=value; tr.appendChild(td); });
           body.appendChild(tr);
         });
         table.append(head,body);
