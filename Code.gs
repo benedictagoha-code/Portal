@@ -1936,5 +1936,5 @@ function endClassroom(token, sessionID) {
   const endedAt = new Date().toISOString();
   setCellByHeader_(V11_CLASSROOMS_SHEET, classroom._row, 'Status', 'ENDED');
   setCellByHeader_(V11_CLASSROOMS_SHEET, classroom._row, 'EndedAt', endedAt);
-  return {success:true,message:'The virtual classroom has ended.'};
+  return {success:true,message:'The classroom session has been closed in the portal. Participants already connected to the meeting may remain connected until they leave.'};
 }
