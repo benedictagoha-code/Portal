@@ -337,6 +337,17 @@
               <p class="text-muted mt-1">Use the selected participation mode to control who may speak or use cameras. Individual approval requests appear below. Students must consent before their microphones or cameras can be enabled.</p>
               <div id="classroomParticipantsBox" class="mt-1"><p class="text-muted">Loading participant list...</p></div>
             </div>
+            <div class="card mb-2" id="classroomInteractionPanel" style="background:var(--surface-alt,#f8fafc);">
+              <div class="flex-between" style="gap:0.6rem;flex-wrap:wrap;">
+                <div><strong>Live lecture interaction</strong><p class="text-muted" style="margin:0.2rem 0 0;">Raise your hand, join the discussion, or use the live classroom chat.</p></div>
+                <div class="flex-between" style="gap:0.4rem;flex-wrap:wrap;">
+                  <button type="button" class="btn btn-primary btn-sm" id="classroomRaiseHandBtn" onclick="onClassroomRaiseHand()">✋ Raise Hand</button>
+                  <button type="button" class="btn btn-outline btn-sm" onclick="onClassroomToggleChat()">💬 Open Chat / Q&amp;A</button>
+                  <button type="button" class="btn btn-outline btn-sm" onclick="onClassroomShareScreen()">▣ Share Screen</button>
+                </div>
+              </div>
+              <p class="text-muted mt-1" id="classroomInteractionHint" aria-live="polite">Use Raise Hand to request a speaking turn. The lecturer can invite you to speak.</p>
+            </div>
             <div id="classroomHandStatus" class="alert alert-success hidden mb-2" aria-live="polite"></div>
             <div id="jitsiClassroomFrame" style="width:100%;min-height:560px;border-radius:10px;overflow:hidden;background:#111827;"></div>
             <p class="text-muted mt-1">Classroom audio/video is provided by the meeting service. Camera and microphone permissions are also subject to browser and meeting-service controls.</p>
@@ -2023,6 +2034,11 @@
               if (activeClassroom) recordClassroomLeave_();
             });
             jitsiClassroomApi.addListener('raiseHandUpdated', data => {
+              if (data && data.id && String(data.id) === String(jitsiLocalParticipantID)) {
+                classroomLocalHandRaised = !!data.handRaised;
+                const handButton = document.getElementById('classroomRaiseHandBtn');
+                if (handButton) handButton.textContent = classroomLocalHandRaised ? '✋ Lower Hand' : '✋ Raise Hand';
+              }
               const box = document.getElementById('classroomHandStatus');
               if (box) {
                 const who = data && data.id ? jitsiClassroomApi.getDisplayName(data.id) : 'A participant';
@@ -2082,6 +2098,9 @@
       }
       jitsiClassroomIsModerator = false;
       jitsiLocalParticipantID = '';
+      classroomLocalHandRaised = false;
+      const handButton = document.getElementById('classroomRaiseHandBtn');
+      if (handButton) handButton.textContent = '✋ Raise Hand';
       await recordClassroomLeave_();
       document.getElementById('classroomMeetingCard').classList.add('hidden');
       document.getElementById('jitsiClassroomFrame').innerHTML = '';
@@ -2105,6 +2124,46 @@
         }
       } catch (err) { alertMsg('appAlert', err.message, 'error'); }
       finally { loading(false); }
+    }
+
+    let classroomLocalHandRaised = false;
+
+    function onClassroomRaiseHand() {
+      if (!jitsiClassroomApi || !activeClassroom) {
+        alertMsg('appAlert', 'Join a live classroom before raising your hand.', 'error');
+        return;
+      }
+      try {
+        jitsiClassroomApi.executeCommand('toggleRaiseHand');
+        const hint = document.getElementById('classroomInteractionHint');
+        if (hint) hint.textContent = classroomLocalHandRaised
+          ? 'Your hand-lowering request has been sent.'
+          : 'Your hand-raising request has been sent. The lecturer will see your request.';
+      } catch (err) {
+        alertMsg('appAlert', 'The meeting service could not send your hand-raise request: ' + err.message, 'error');
+      }
+    }
+
+    function onClassroomToggleChat() {
+      if (!jitsiClassroomApi || !activeClassroom) return;
+      try {
+        jitsiClassroomApi.executeCommand('toggleChat');
+        const hint = document.getElementById('classroomInteractionHint');
+        if (hint) hint.textContent = 'Use the classroom chat for questions, comments and discussion. Keep contributions relevant to the lecture.';
+      } catch (err) {
+        alertMsg('appAlert', 'The classroom chat could not be opened: ' + err.message, 'error');
+      }
+    }
+
+    function onClassroomShareScreen() {
+      if (!jitsiClassroomApi || !activeClassroom) return;
+      try {
+        jitsiClassroomApi.executeCommand('toggleShareScreen');
+        const hint = document.getElementById('classroomInteractionHint');
+        if (hint) hint.textContent = 'Screen sharing is subject to your browser permission and the meeting participation settings.';
+      } catch (err) {
+        alertMsg('appAlert', 'Screen sharing could not be started: ' + err.message, 'error');
+      }
     }
 
     function onClassroomMuteAll(mediaType) {
@@ -2158,7 +2217,7 @@
           return;
         }
         box.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Participant</th><th>Microphone</th><th>Camera</th><th>Lecturer actions</th></tr></thead><tbody>' +
-          participants.map(p => {
+          participants.filter(p => String(p.id || '') !== String(jitsiLocalParticipantID)).map(p => {
             const id = String(p.id || '');
             const name = esc(p.displayName || 'Participant');
             const audio = p.audioMuted ? 'Muted' : 'On';
