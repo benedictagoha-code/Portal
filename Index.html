@@ -764,6 +764,7 @@
     let classroomJoinEventID = null;
     let jitsiClassroomApi = null;
     let jitsiClassroomIsModerator = false;
+    let jitsiLocalParticipantID = '';
 
     const MODE_LABELS = {
       HIGHEST: 'Best (Highest)',
@@ -1996,6 +1997,7 @@
         const launch = () => {
           try {
             jitsiClassroomIsModerator = false;
+            jitsiLocalParticipantID = '';
             const mode = joined.participationMode;
             const audioMuted = mode === 'VIEW_ONLY' || mode === 'RAISE_HAND';
             const videoMuted = mode === 'VIEW_ONLY' || mode === 'AUDIO_PARTICIPATION' || mode === 'RAISE_HAND';
@@ -2037,10 +2039,14 @@
             jitsiClassroomApi.addListener('participantJoined', refreshClassroomParticipants);
             jitsiClassroomApi.addListener('participantLeft', refreshClassroomParticipants);
             jitsiClassroomApi.addListener('participantRoleChanged', data => {
-              jitsiClassroomIsModerator = !!(data && data.role === 'moderator');
+              if (!data || !jitsiLocalParticipantID || data.id !== jitsiLocalParticipantID) return;
+              jitsiClassroomIsModerator = data.role === 'moderator';
               if (jitsiClassroomIsModerator) applyClassroomModeToMeeting(mode);
             });
-            jitsiClassroomApi.addListener('videoConferenceJoined', refreshClassroomParticipants);
+            jitsiClassroomApi.addListener('videoConferenceJoined', data => {
+              jitsiLocalParticipantID = data && data.id ? data.id : '';
+              refreshClassroomParticipants();
+            });
             resolve(true);
           } catch (err) { reject(err); }
         };
@@ -2073,6 +2079,8 @@
         try { jitsiClassroomApi.dispose(); } catch (e) {}
         jitsiClassroomApi = null;
       }
+      jitsiClassroomIsModerator = false;
+      jitsiLocalParticipantID = '';
       await recordClassroomLeave_();
       document.getElementById('classroomMeetingCard').classList.add('hidden');
       document.getElementById('jitsiClassroomFrame').innerHTML = '';
