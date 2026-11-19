@@ -2004,21 +2004,29 @@ function getClassrooms(token, courseID) {
 
 function joinClassroom(token, sessionID) {
   const user = requireUser_(token);
-  const classroom = v11FindClassroom_(sessionID);
-  v11CanAccessClassroom_(user, classroom);
-  if (String(classroom.status).toUpperCase() !== 'LIVE') throw new Error('This classroom is not currently live.');
-  const now = new Date().toISOString();
-  const eventID = makeId_('EVT');
-  v11ClassroomSheet_(V11_CLASSROOM_EVENTS_SHEET).appendRow([
-    eventID, classroom.sessionid, user.userID, user.name, user.role, 'JOIN', now
-  ]);
-  return {
-    success:true, eventID:eventID, sessionID:classroom.sessionid,
-    roomName:classroom.roomname, title:classroom.title,
-    courseCode:classroom.coursecode, lecturerName:classroom.lecturername,
-    participationMode:classroom.participationmode, userID:user.userID,
-    displayName:user.name, role:user.role, joinedAt:now
-  };
+  const initial = v11FindClassroom_(sessionID);
+  v11CanAccessClassroom_(user, initial);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const classroom = v11FindClassroom_(sessionID);
+    v11CanAccessClassroom_(user, classroom);
+    if (String(classroom.status).toUpperCase() !== 'LIVE') throw new Error('This classroom is not currently live.');
+    const now = new Date().toISOString();
+    const eventID = makeId_('EVT');
+    v11ClassroomSheet_(V11_CLASSROOM_EVENTS_SHEET).appendRow([
+      eventID, classroom.sessionid, user.userID, user.name, user.role, 'JOIN', now
+    ]);
+    return {
+      success:true, eventID:eventID, sessionID:classroom.sessionid,
+      roomName:classroom.roomname, title:classroom.title,
+      courseCode:classroom.coursecode, lecturerName:classroom.lecturername,
+      participationMode:classroom.participationmode, userID:user.userID,
+      displayName:user.name, role:user.role, joinedAt:now
+    };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function leaveClassroom(token, sessionID, eventID) {
