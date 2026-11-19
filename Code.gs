@@ -1911,9 +1911,22 @@ function leaveClassroom(token, sessionID, eventID) {
   const user = requireUser_(token);
   const classroom = v11FindClassroom_(sessionID);
   v11CanAccessClassroom_(user, classroom);
+  const joinID = String(eventID || '').trim().slice(0,80);
+  if (!joinID) throw new Error('The classroom join record is missing.');
+  const events = getRows_(V11_CLASSROOM_EVENTS_SHEET);
+  const joined = events.some(e => String(e.eventid) === joinID &&
+    String(e.sessionid) === String(classroom.sessionid) &&
+    String(e.userid) === String(user.userID) &&
+    String(e.eventtype) === 'JOIN');
+  if (!joined) throw new Error('The matching classroom join record was not found.');
+  const leaveType = 'LEAVE:' + joinID;
+  if (events.some(e => String(e.sessionid) === String(classroom.sessionid) &&
+    String(e.userid) === String(user.userID) && String(e.eventtype) === leaveType)) {
+    return {success:true,message:'Classroom departure was already recorded.'};
+  }
   v11ClassroomSheet_(V11_CLASSROOM_EVENTS_SHEET).appendRow([
     makeId_('EVT'), classroom.sessionid, user.userID, user.name, user.role,
-    'LEAVE:' + String(eventID || '').slice(0,80), new Date().toISOString()
+    leaveType, new Date().toISOString()
   ]);
   return {success:true,message:'Classroom departure recorded.'};
 }
