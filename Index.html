@@ -1460,6 +1460,10 @@
         if (fInput.files && fInput.files[0]) {
           const f = fInput.files[0];
           if (f.size > 20 * 1024 * 1024) throw new Error('Please keep direct uploads below 20 MB. For larger video/audio files, upload to approved cloud storage and paste the share link.');
+          const extension = String(f.name).split('.').pop().toLowerCase();
+          if (!['pdf','doc','docx','ppt','pptx','mp4','webm','mov','mp3','wav','m4a','ogg'].includes(extension)) {
+            throw new Error('Unsupported file type. Choose PDF, Office, MP4/WebM/MOV video, or MP3/WAV/M4A/OGG audio.');
+          }
           payload.fileName = f.name;
           payload.mimeType = f.type;
           payload.base64Data = await new Promise((res, rej) => {
