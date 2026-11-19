@@ -580,10 +580,9 @@ function uploadMaterial(token, payload) {
     if (fileUrl.length > 2048 || !/^https?:\/\//i.test(fileUrl)) {
       throw new Error('External resource links must be valid HTTP or HTTPS URLs.');
     }
-    let parsed;
-    try { parsed = new URL(fileUrl); } catch (err) { throw new Error('The external resource link is not valid.'); }
-    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
-      throw new Error('Only HTTP and HTTPS resource links are allowed.');
+    const urlMatch = fileUrl.match(/^https?:\/\/([^\/?#]+)(?:[\/?#]|$)/i);
+    if (!urlMatch || !urlMatch[1] || /[\\s@]/.test(urlMatch[1])) {
+      throw new Error('The external resource link is not valid. Use a complete HTTP or HTTPS link.');
     }
   }
 
