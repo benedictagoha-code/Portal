@@ -2100,7 +2100,6 @@
         document.getElementById('classroomMeetingCard').classList.remove('hidden');
         const lecturerTools = document.getElementById('classroomLecturerTools');
         if (lecturerTools) lecturerTools.classList.toggle('hidden', !user || user.role === 'Student');
-        document.getElementById('classroomLecturerTools').classList.toggle('hidden', user.role === 'Student');
         await loadJitsiClassroom(joined);
         document.getElementById('classroomMeetingCard').scrollIntoView({behavior:'smooth',block:'start'});
       } catch (err) {
