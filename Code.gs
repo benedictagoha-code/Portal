@@ -1674,7 +1674,8 @@ function doPost(e) {
       updateClassroomParticipation: updateClassroomParticipation,
       endClassroom: endClassroom,
       submitClassroomQuestion: submitClassroomQuestion,
-      getClassroomQuestions: getClassroomQuestions
+      getClassroomQuestions: getClassroomQuestions,
+      getClassroomAttendance: getClassroomAttendance
     };
 
     if (!Object.prototype.hasOwnProperty.call(ROUTES, fn)) {
@@ -1954,6 +1955,52 @@ function getClassroomQuestions(token, sessionID) {
     questionID:r.questionid, userName:r.username, userRole:r.userrole,
     question:r.question, submittedAt:r.submittedat, status:r.status
   }))};
+}
+
+
+function getClassroomAttendance(token, sessionID) {
+  const user = requireUser_(token, ['Lecturer','Administrator']);
+  const classroom = v11FindClassroom_(sessionID);
+  requireCourseAccess_(user, classroom.courseid);
+  const events = getRows_(V11_CLASSROOM_EVENTS_SHEET)
+    .filter(e => String(e.sessionid) === String(classroom.sessionid))
+    .sort((a,b) => String(a.occurredat).localeCompare(String(b.occurredat)));
+  const joins = new Map();
+  const totals = new Map();
+  events.forEach(e => {
+    const uid = String(e.userid || '');
+    if (!uid) return;
+    if (String(e.eventtype) === 'JOIN') {
+      const key = String(e.eventid);
+      joins.set(key, {uid:uid, name:String(e.username || uid), role:String(e.userrole || ''), at:new Date(e.occurredat).getTime()});
+    } else if (String(e.eventtype).indexOf('LEAVE:') === 0) {
+      const key = String(e.eventtype).slice(6);
+      const start = joins.get(key);
+      if (!start || start.uid !== uid) return;
+      const end = new Date(e.occurredat).getTime();
+      const duration = Math.max(0, Math.min(24*60*60*1000, end - start.at));
+      const prior = totals.get(uid) || {userID:uid, name:start.name, role:start.role, minutes:0, visits:0};
+      prior.minutes += duration / 60000;
+      prior.visits++;
+      totals.set(uid, prior);
+      joins.delete(key);
+    }
+  });
+  const now = Date.now();
+  joins.forEach(start => {
+    if (String(classroom.status).toUpperCase() !== 'LIVE' || !isFinite(start.at)) return;
+    const duration = Math.max(0, Math.min(24*60*60*1000, now - start.at));
+    const prior = totals.get(start.uid) || {userID:start.uid, name:start.name, role:start.role, minutes:0, visits:0};
+    prior.minutes += duration / 60000;
+    prior.visits++;
+    totals.set(start.uid, prior);
+  });
+  const rows = Array.from(totals.values()).map(x => ({
+    userID:x.userID, name:x.name, role:x.role, visits:x.visits,
+    minutes:Math.round(x.minutes*10)/10
+  })).sort((a,b) => a.name.localeCompare(b.name));
+  return {success:true, sessionID:classroom.sessionid, status:classroom.status, attendance:rows,
+    note:'This is a virtual-session participation log based on recorded join/leave events, not the official course attendance register.'};
 }
 
 function endClassroom(token, sessionID) {
