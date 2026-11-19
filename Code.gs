@@ -581,7 +581,7 @@ function uploadMaterial(token, payload) {
       throw new Error('External resource links must be valid HTTP or HTTPS URLs.');
     }
     const urlMatch = fileUrl.match(/^https?:\/\/([^\/?#]+)(?:[\/?#]|$)/i);
-    if (!urlMatch || !urlMatch[1] || /[\\s@]/.test(urlMatch[1])) {
+    if (!urlMatch || !urlMatch[1] || urlMatch[1].indexOf('@') >= 0 || urlMatch[1].indexOf(' ') >= 0) {
       throw new Error('The external resource link is not valid. Use a complete HTTP or HTTPS link.');
     }
   }
@@ -592,9 +592,11 @@ function uploadMaterial(token, payload) {
     if (encoded.length > 28 * 1024 * 1024) throw new Error('Direct uploads are limited to 20 MB. Use an approved cloud link for larger media.');
     const bytes = Utilities.base64Decode(encoded);
     if (bytes.length > 20 * 1024 * 1024) throw new Error('Direct uploads are limited to 20 MB. Use an approved cloud link for larger media.');
-    const safeName = String(payload.fileName).replace(/[\\\\/:*?"<>|\\r\\n]/g, '_').slice(0, 180);
-    const allowed = /\\.(pdf|doc|docx|ppt|pptx|mp4|webm|mov|mp3|wav|m4a)$/i;
-    if (!allowed.test(safeName)) throw new Error('Unsupported file type. Upload PDF, Office, video or audio files only.');
+    const safeName = String(payload.fileName).replace(/[^A-Za-z0-9._ -]/g, '_').slice(0, 180);
+    const extension = safeName.substring(safeName.lastIndexOf('.') + 1).toLowerCase();
+    if (['pdf','doc','docx','ppt','pptx','mp4','webm','mov','mp3','wav','m4a'].indexOf(extension) < 0) {
+      throw new Error('Unsupported file type. Upload PDF, Office, video or audio files only.');
+    }
     const folderId = PropertiesService.getScriptProperties().getProperty(PROP_DRIVE_ID);
     if (!folderId) throw new Error('Courseware storage is not configured. Contact the system administrator.');
     const folder = DriveApp.getFolderById(folderId);
