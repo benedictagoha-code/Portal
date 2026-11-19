@@ -2237,6 +2237,11 @@
           if (becameModerator && activeClassroom) applyClassroomModeToMeeting(activeClassroom.participationMode);
         }
         const otherParticipants = participants.filter(p => String(p.id || '') !== String(jitsiLocalParticipantID));
+        otherParticipants.sort((a, b) => {
+          const aTime = Number(classroomRaisedHands[String(a.id || '')]) || Number.MAX_SAFE_INTEGER;
+          const bTime = Number(classroomRaisedHands[String(b.id || '')]) || Number.MAX_SAFE_INTEGER;
+          return aTime - bTime;
+        });
         if (!otherParticipants.length) {
           box.innerHTML = '<p class="text-muted">No other participants have joined yet.</p>';
           return;
