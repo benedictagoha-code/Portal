@@ -2493,9 +2493,13 @@
     }
 
     async function onEndClassroom(sessionID) {
-      if (!confirm('Close this classroom session in the portal? Participants already connected may remain in the meeting until they leave.')) return;
+      if (!confirm('End this lecture? The meeting service will also be asked to close the conference for everyone when that feature is supported.')) return;
       loading(true, 'Ending lecture...');
       try {
+        if (activeClassroom && activeClassroom.sessionID === sessionID &&
+            jitsiClassroomApi && jitsiClassroomIsModerator) {
+          try { jitsiClassroomApi.executeCommand('endConference'); } catch (meetingErr) {}
+        }
         const res = await api('endClassroom', token, sessionID);
         alertMsg('appAlert', res.message, res.success ? 'success' : 'error');
         if (activeClassroom && activeClassroom.sessionID === sessionID) await onLeaveClassroom();
