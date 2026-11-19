@@ -600,7 +600,20 @@ function uploadMaterial(token, payload) {
     const folderId = PropertiesService.getScriptProperties().getProperty(PROP_DRIVE_ID);
     if (!folderId) throw new Error('Courseware storage is not configured. Contact the system administrator.');
     const folder = DriveApp.getFolderById(folderId);
-    const blob = Utilities.newBlob(bytes, String(payload.mimeType || 'application/octet-stream').slice(0, 120), safeName);
+    const mimeTypes = {
+      pdf:'application/pdf',
+      doc:'application/msword',
+      docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      ppt:'application/vnd.ms-powerpoint',
+      pptx:'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      mp4:'video/mp4',
+      webm:'video/webm',
+      mov:'video/quicktime',
+      mp3:'audio/mpeg',
+      wav:'audio/wav',
+      m4a:'audio/mp4'
+    };
+    const blob = Utilities.newBlob(bytes, mimeTypes[extension], safeName);
     const file = folder.createFile(blob);
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
     fileUrl = file.getUrl();
