@@ -403,6 +403,34 @@
             <div class="card-title" id="coursesCardHeading">Courses &amp; Self-Enrolment</div>
             <div class="table-wrap" id="coursesBox"></div>
           </div>
+          <div id="staffRosterCard" class="card hidden">
+            <div class="card-title">Course Enrolment Register &amp; Email</div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="rosterCourse">Select course</label>
+                <select id="rosterCourse" onchange="loadCourseRoster()"><option value="">-- Select your course --</option></select>
+              </div>
+              <div class="form-group" style="align-self:end">
+                <button type="button" class="btn btn-primary" onclick="loadCourseRoster()">View Enrollees</button>
+              </div>
+            </div>
+            <div id="courseRosterSummary" class="text-muted mt-1"></div>
+            <div class="table-wrap mt-1" id="courseRosterTable"><p class="text-muted">Select a course to view its enrolled students.</p></div>
+            <div id="courseRosterEmailPanel" class="mt-2 hidden">
+              <div class="card-title">Email Enrollees</div>
+              <p class="text-muted">Choose one or more students below, or tick “Email all enrollees”. Only the selected students' registered email addresses will be used.</p>
+              <label style="display:flex;align-items:center;gap:10px;margin:0.5rem 0;">
+                <input type="checkbox" id="rosterSelectAll" onchange="toggleAllRosterStudents(this.checked)"> <strong>Email all enrollees in this course</strong>
+              </label>
+              <div id="rosterEmailChoices" class="form-grid"></div>
+              <form onsubmit="onSendCourseEnrolmentEmail(event)" class="form-grid mt-2">
+                <div class="form-group full"><label for="rosterEmailSubject">Subject *</label><input id="rosterEmailSubject" maxlength="200" required></div>
+                <div class="form-group full"><label for="rosterEmailBody">Message *</label><textarea id="rosterEmailBody" rows="6" maxlength="10000" required></textarea></div>
+                <div class="full"><button type="submit" class="btn btn-primary">Send to Selected Enrollees</button></div>
+              </form>
+              <div id="rosterEmailStatus" class="text-muted mt-1"></div>
+            </div>
+          </div>
         </section>
 
         <!-- 3. COURSEWARE MATERIALS -->
@@ -1069,6 +1097,7 @@
       document.getElementById('staffResBox').classList.toggle('hidden', !isStaff);
       document.getElementById('gradeReportCard').classList.toggle('hidden', !isStaff);
       document.getElementById('externalEmailSetting').classList.toggle('hidden', !isAdmin);
+      document.getElementById('staffRosterCard').classList.toggle('hidden', !isStaff);
       document.getElementById('staffNoticeBox').classList.toggle('hidden', !isStaff);
       document.getElementById('classroomStaffControls').classList.toggle('hidden', !isStaff);
 
@@ -1163,6 +1192,11 @@
           } else {
             const allCrs = crsRes.allCourses || myCourses;
             const lecturerOptions = crsRes.lecturerOptions || [];
+            const rosterCourses = allCrs.filter(c => user.role === 'Administrator' || (c.assignedLecturers || (c.lecturerid ? [c.lecturerid] : [])).some(id => String(id).toUpperCase() === String(user.userID).toUpperCase()));
+            const rosterSelect = document.getElementById('rosterCourse');
+            const priorRosterCourse = rosterSelect.value;
+            rosterSelect.innerHTML = '<option value="">-- Select your course --</option>' + rosterCourses.map(c => '<option value="' + esc(c.courseid) + '">' + esc(c.coursecode) + ' — ' + esc(c.coursetitle) + '</option>').join('');
+            if (rosterCourses.some(c => String(c.courseid) === String(priorRosterCourse))) rosterSelect.value = priorRosterCourse;
             const lecturerName = id => {
               const found = lecturerOptions.find(l => String(l.userID).toUpperCase() === String(id).toUpperCase());
               return found ? found.name + ' (' + id + ')' : id;
@@ -1172,10 +1206,11 @@
                 const assigned = c.assignedLecturers || (c.lecturerid ? [c.lecturerid] : []);
                 const isMine = assigned.some(id => String(id).toUpperCase() === String(user.userID).toUpperCase());
                 const assignedText = assigned.length ? assigned.map(lecturerName).map(esc).join('<br>') : 'Unassigned';
+                const rosterButton = (user.role === 'Administrator' || isMine) ? `<button class="btn btn-outline btn-sm" onclick="openCourseRoster('${esc(c.courseid)}')">View Enrollees</button>` : '';
                 const action = user.role === 'Administrator'
                   ? `<div class="form-group" style="min-width:190px;margin:0;"><select id="lecAdd_${esc(c.courseid)}"><option value="">Add lecturer...</option>${lecturerOptions.map(l => `<option value="${esc(l.userID)}">${esc(l.name)} (${esc(l.userID)})</option>`).join('')}</select><button class="btn btn-primary btn-sm mt-1" onclick="onManageCourseLecturer('${esc(c.courseid)}','add')">Add Lecturer</button>${assigned.length ? assigned.map(id => `<button class="btn btn-outline btn-sm mt-1" onclick="onManageCourseLecturer('${esc(c.courseid)}','remove','${esc(id)}')">Remove ${esc(id)}</button>`).join('') : ''}</div>`
                   : (isMine ? '<span class="badge b-green">My Course</span>' : `<button class="btn btn-outline btn-sm" onclick="onClaimCourse('${esc(c.courseid)}')">Assign to Me</button>`);
-                return `<tr><td><strong>${esc(c.coursecode)}</strong></td><td>${esc(c.coursetitle)}</td><td>${esc(c.level)}</td><td>${esc(c.creditunits)}</td><td>${assignedText}</td><td>${action}</td></tr>`;
+                return `<tr><td><strong>${esc(c.coursecode)}</strong></td><td>${esc(c.coursetitle)}</td><td>${esc(c.level)}</td><td>${esc(c.creditunits)}</td><td>${assignedText}</td><td>${rosterButton} ${action}</td></tr>`;
               }).join('')
             }</tbody></table>`;
           }
@@ -1572,6 +1607,72 @@
         URL.revokeObjectURL(url);
         alertMsg('appAlert', `Downloaded ${res.fileName}: ${res.count} eligible of ${res.total} enrolled students.`, 'success');
       } finally { loading(false); }
+    }
+
+    async function openCourseRoster(courseID) {
+      const select=document.getElementById('rosterCourse');
+      if(select) select.value=courseID;
+      await loadCourseRoster();
+      const card=document.getElementById('staffRosterCard');
+      if(card) card.scrollIntoView({behavior:'smooth',block:'start'});
+    }
+
+    let activeCourseRoster = [];
+    async function loadCourseRoster() {
+      const courseID=document.getElementById('rosterCourse').value;
+      const table=document.getElementById('courseRosterTable');
+      const panel=document.getElementById('courseRosterEmailPanel');
+      const summary=document.getElementById('courseRosterSummary');
+      if(!courseID){table.innerHTML='<p class="text-muted">Select a course to view its enrolled students.</p>';panel.classList.add('hidden');summary.textContent='';return;}
+      table.innerHTML='<p class="text-muted">Loading enrolment register...</p>';
+      panel.classList.add('hidden');
+      try{
+        const result=await api('getCourseRoster',token,courseID);
+        if(!result||!result.success)throw new Error(result&&result.message||'Could not load the course register.');
+        activeCourseRoster=result.students||[];
+        summary.textContent=(result.course.courseCode+' — '+result.course.courseTitle)+': '+activeCourseRoster.length+' enrolled student(s).';
+        if(!activeCourseRoster.length){table.innerHTML='<p class="text-muted">There are no enrollees in this course yet.</p>';return;}
+        table.innerHTML='<table><thead><tr><th>S/N</th><th>Matriculation No.</th><th>Student Name</th><th>Gender</th><th>Programme</th><th>Level</th><th>Email</th><th>Phone</th><th>Date Enrolled</th></tr></thead><tbody>'+
+          activeCourseRoster.map((s,i)=>'<tr><td>'+(i+1)+'</td><td>'+esc(s.matricNo)+'</td><td>'+esc(s.studentName)+'</td><td>'+esc(s.gender)+'</td><td>'+esc(s.programme)+'</td><td>'+esc(s.level)+'</td><td>'+esc(s.email)+'</td><td>'+esc(s.phone)+'</td><td>'+esc(s.enrolledAt?fmtDate(s.enrolledAt):'')+'</td></tr>').join('')+'</tbody></table>';
+        document.getElementById('rosterSelectAll').checked=false;
+        renderRosterEmailChoices();
+        panel.classList.remove('hidden');
+      }catch(err){table.innerHTML='<p class="text-danger">'+esc(err.message)+'</p>';}
+    }
+
+    function renderRosterEmailChoices(){
+      const box=document.getElementById('rosterEmailChoices');
+      box.innerHTML=activeCourseRoster.map((s,i)=>'<label style="display:flex;align-items:center;gap:8px;padding:5px 0;"><input type="checkbox" class="roster-student-check" value="'+esc(s.matricNo)+'" onchange="syncRosterSelectAll()"> <span>'+esc(s.studentName)+' ('+esc(s.matricNo)+') — '+esc(s.email||'No email registered')+'</span></label>').join('');
+      box.querySelectorAll('input').forEach((el,i)=>{if(!activeCourseRoster[i].email)el.disabled=true;});
+    }
+
+    function toggleAllRosterStudents(checked){
+      document.querySelectorAll('.roster-student-check').forEach(el=>{el.checked=checked&&!el.disabled;});
+    }
+    function syncRosterSelectAll(){
+      const checks=Array.from(document.querySelectorAll('.roster-student-check'));
+      document.getElementById('rosterSelectAll').checked=checks.length>0&&checks.every(el=>el.checked||el.disabled);
+    }
+
+    async function onSendCourseEnrolmentEmail(e){
+      e.preventDefault();
+      const courseID=document.getElementById('rosterCourse').value;
+      const selectAll=document.getElementById('rosterSelectAll').checked;
+      const matricNos=Array.from(document.querySelectorAll('.roster-student-check:checked')).map(el=>el.value);
+      if(!selectAll&&!matricNos.length){alertMsg('appAlert','Select at least one enrollee, or choose Email all enrollees.','error');return;}
+      if(!confirm(selectAll?'Send this email to every enrollee with a registered email address in this course?':'Send this email to '+matricNos.length+' selected enrollee(s)?'))return;
+      loading(true,'Sending course email...');
+      try{
+        const result=await api('sendCourseEnrolmentEmail',token,{courseID:courseID,selectAll:selectAll,matricNos:matricNos,subject:document.getElementById('rosterEmailSubject').value,body:document.getElementById('rosterEmailBody').value});
+        if(!result||!result.success)throw new Error(result&&result.message||'Course email could not be sent.');
+        alertMsg('appAlert',result.message,'success');
+        document.getElementById('rosterEmailSubject').value='';
+        document.getElementById('rosterEmailBody').value='';
+        document.getElementById('rosterEmailStatus').textContent=result.message;
+        document.querySelectorAll('.roster-student-check').forEach(el=>el.checked=false);
+        document.getElementById('rosterSelectAll').checked=false;
+      }catch(err){alertMsg('appAlert',err.message,'error');document.getElementById('rosterEmailStatus').textContent=err.message;}
+      finally{loading(false);}
     }
 
     async function onSendPortalEmail(e) {
