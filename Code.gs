@@ -568,8 +568,69 @@ function enrolStudentInCourse(token, courseID) {
 
 function getCourseRoster(token, courseID) {
   const user = requireUser_(token, ['Lecturer', 'Administrator']);
-  requireCourseAccess_(user, courseID);
-  return { success: true, students: getRows_(SHEETS.ENROLMENTS).filter(e => e.courseid === courseID) };
+  const course = requireCourseAccess_(user, courseID);
+  const students = getRows_(SHEETS.ENROLMENTS).filter(e => String(e.courseid) === String(courseID)).map(e => {
+    const student = getRows_(SHEETS.STUDENTS).find(s => normaliseMatric_(s.matricno) === normaliseMatric_(e.matricno)) || {};
+    return {
+      enrolmentID: e.enrolmentid || '',
+      studentID: e.studentid || student.studentid || '',
+      matricNo: e.matricno || '',
+      studentName: e.studentname || [student.surname, student.firstname, student.othernames].filter(Boolean).join(' '),
+      surname: student.surname || '',
+      firstName: student.firstname || '',
+      otherNames: student.othernames || '',
+      gender: student.gender || '',
+      programme: student.programme || '',
+      level: student.level || '',
+      email: student.email || '',
+      phone: student.phone || '',
+      enrolledAt: e.enrolledat || ''
+    };
+  }).sort((a,b)=>String(a.studentName).localeCompare(String(b.studentName)));
+  return { success:true, course:{courseID:course.courseid,courseCode:course.coursecode,courseTitle:course.coursetitle}, students:students, total:students.length };
+}
+
+function sendCourseEnrolmentEmail(token, payload) {
+  const user = requireUser_(token, ['Lecturer','Administrator']);
+  payload = payload || {};
+  const course = requireCourseAccess_(user, payload.courseID);
+  const subject = String(payload.subject || '').trim();
+  const body = String(payload.body || '').trim();
+  if (!subject || subject.length > 200) return {success:false,message:'Enter a subject of no more than 200 characters.'};
+  if (!body || body.length > 10000) return {success:false,message:'Enter a message of no more than 10,000 characters.'};
+
+  const roster = getCourseRoster(token, course.courseid).students;
+  const requested = Array.isArray(payload.matricNos) ? payload.matricNos.map(normaliseMatric_) : [];
+  const selectAll = payload.selectAll === true;
+  const chosen = selectAll ? roster : roster.filter(s=>requested.indexOf(normaliseMatric_(s.matricNo))>=0);
+  if (!chosen.length) return {success:false,message:'Select at least one enrolled student.'};
+  if (chosen.length > 100) return {success:false,message:'This course has more than 100 selected enrollees. Please send to a smaller group.'};
+  const invalid = chosen.filter(s=>!validEmailAddress_(s.email));
+  if (invalid.length) return {success:false,message:'These selected enrollees have no valid registered email address: '+invalid.map(s=>s.matricNo).join(', ')};
+  const emails = Array.from(new Set(chosen.map(s=>String(s.email).trim().toLowerCase())));
+  if (!emails.length) return {success:false,message:'No valid email addresses were found.'};
+
+  const dateKey = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'Africa/Lagos', 'yyyyMMdd');
+  const propKey = 'PSYC_COURSE_MAIL_DAILY_' + String(user.userID).replace(/[^A-Za-z0-9_-]/g,'_') + '_' + dateKey;
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const sentToday = Number(props.getProperty(propKey) || 0);
+    if (sentToday >= 20) return {success:false,message:'Daily course-email limit reached (20 messages per user). Try again tomorrow.'};
+    const senderEmail = (getRows_(SHEETS.LECTURERS).find(x=>String(x.lecturerid).toUpperCase()===String(user.userID).toUpperCase())||{}).email ||
+      (getRows_(SHEETS.USERS).find(x=>String(x.userid).toUpperCase()===String(user.userID).toUpperCase())||{}).email || '';
+    let sent = 0;
+    try {
+      emails.forEach(email=>{ MailApp.sendEmail({to:email,subject:subject,body:body,name:String(user.name||'psyc@UNIDEL')+' — psyc@UNIDEL',replyTo:validEmailAddress_(senderEmail)?String(senderEmail).trim():undefined}); sent++; });
+      props.setProperty(propKey,String(sentToday+1));
+      logEmailDelivery_(user,emails.length,'COURSE_ROSTER_SENT');
+      return {success:true,sent:sent,courseCode:course.coursecode,message:'Email sent to '+sent+' enrollee(s) in '+course.coursecode+'.'};
+    } catch(err) {
+      logEmailDelivery_(user,sent,'COURSE_ROSTER_PARTIAL_OR_FAILED');
+      return {success:false,sent:sent,message:'Delivery stopped after '+sent+' recipient(s): '+err.message};
+    }
+  } finally { lock.releaseLock(); }
 }
 
 /* ============================================================
@@ -1659,6 +1720,7 @@ function doPost(e) {
       manageCourseLecturer: manageCourseLecturer,
       enrolStudentInCourse: enrolStudentInCourse,
       getCourseRoster: getCourseRoster,
+      sendCourseEnrolmentEmail: sendCourseEnrolmentEmail,
       uploadMaterial: uploadMaterial,
       getMaterials: getMaterials,
       recordAttendance: recordAttendance,
