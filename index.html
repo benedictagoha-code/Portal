@@ -438,13 +438,26 @@
           <div id="staffMatBox" class="card hidden">
             <div class="card-title">Upload Courseware, Audio, Video &amp; External Resources</div>
             <form onsubmit="onUploadMaterial(event)" class="form-grid">
-              <div class="form-group"><label>Course *</label><select id="mCourse" required></select></div>
+              <div class="form-group"><label>Course *</label><select id="mCourse" required onchange="loadResourceFolders()"></select></div>
+              <div class="form-group"><label>Save in folder</label><select id="mFolder"><option value="">Course Resources (root)</option></select></div>
               <div class="form-group"><label>Resource type</label><select id="mType"><option>Lecture Note</option><option>Reading Material</option><option>Assignment</option><option>Video Lecture</option><option>Audio Lecture</option><option>YouTube Resource</option><option>Facebook Resource</option><option>TikTok Resource</option><option>External Website</option></select></div>
               <div class="form-group full"><label>Title *</label><input type="text" id="mTitle" required></div>
               <div class="form-group"><label>Upload file (PDF, Office, video or audio)</label><input type="file" id="mFile" accept=".pdf,.doc,.docx,.ppt,.pptx,.mp4,.webm,.mov,.mp3,.wav,.m4a,audio/*,video/*"><small class="text-muted">For large media files, upload to your approved cloud storage and paste its share link instead.</small></div>
               <div class="form-group"><label>Or external link (YouTube, Facebook, TikTok, website, Drive)</label><input type="url" id="mLink" placeholder="https://..."></div>
               <div class="full"><button type="submit" class="btn btn-primary">Publish Material</button></div>
             </form>
+          </div>
+          <div id="courseFolderManager" class="card hidden">
+            <div class="card-title">Course Folder Manager</div>
+            <p class="text-muted">Create separate folders for teaching resources and test-bank organisation. Each folder belongs only to the selected course.</p>
+            <div class="form-grid">
+              <div class="form-group"><label>Course *</label><select id="folderCourse" onchange="loadCourseFolderManager()"></select></div>
+              <div class="form-group"><label>Folder category</label><select id="folderType" onchange="loadCourseFolderManager()"><option value="RESOURCE">Course Resources</option><option value="TEST_BANK">Test Banks</option></select></div>
+              <div class="form-group"><label>New folder name *</label><input id="newCourseFolderName" maxlength="80" placeholder="e.g. Week 1 Lecture Notes"></div>
+              <div class="form-group"><label>Parent folder</label><select id="folderParent"></select></div>
+              <div class="full"><button type="button" class="btn btn-primary" onclick="onCreateCourseFolder()">Create Folder</button></div>
+            </div>
+            <div id="courseFolderList" class="mt-2"></div>
           </div>
           <div class="card">
             <div class="card-title">Available Courseware</div>
@@ -623,6 +636,7 @@
             <p class="text-muted">Save questions for reuse. Private questions are visible only to their owner; shared questions are available to lecturers assigned to the course.</p>
             <form onsubmit="onSaveBankQuestion(event)" class="form-grid">
               <div class="form-group"><label>Course *</label><select id="bankCourse" required onchange="loadBankQuestions()"></select></div>
+              <div class="form-group"><label>Test Bank folder</label><select id="bankFolder"><option value="">General Test Bank</option></select></div>
               <div class="form-group"><label>Question Type</label><select id="bankType" onchange="toggleBankQuestionFields()"><option value="MCQ">Multiple Choice (one correct)</option><option value="TRUE_FALSE">True / False</option><option value="FILL_GAP">Fill-in-the-Blank</option><option value="MATCHING">Matching Options (dropdown)</option><option value="MULTI_CORRECT">Select All Correct Options</option><option value="MULTI_INCORRECT">Select All Incorrect Options</option></select></div>
               <div class="form-group"><label>Topic</label><input id="bankTopic" placeholder="e.g. Memory"></div>
               <div class="form-group"><label>Difficulty</label><select id="bankDifficulty"><option value="EASY">Easy</option><option value="MEDIUM" selected>Medium</option><option value="HARD">Hard</option></select></div>
@@ -1144,7 +1158,7 @@
         ).join('');
         const classCourseEl = document.getElementById('classCourse');
         if (classCourseEl) classCourseEl.innerHTML = opts;
-        ['mCourse', 'aCourse', 'aSummaryCourse', 'aUploadCourse', 'tCourse', 'rCourse'].forEach(id => {
+        ['mCourse', 'aCourse', 'aSummaryCourse', 'aUploadCourse', 'tCourse', 'rCourse', 'folderCourse', 'bankCourse'].forEach(id => {
           const el = document.getElementById(id);
           if (el) el.innerHTML = opts;
         });
@@ -1210,13 +1224,15 @@
                 const action = user.role === 'Administrator'
                   ? `<div class="form-group" style="min-width:190px;margin:0;"><select id="lecAdd_${esc(c.courseid)}"><option value="">Add lecturer...</option>${lecturerOptions.map(l => `<option value="${esc(l.userID)}">${esc(l.name)} (${esc(l.userID)})</option>`).join('')}</select><button class="btn btn-primary btn-sm mt-1" onclick="onManageCourseLecturer('${esc(c.courseid)}','add')">Add Lecturer</button>${assigned.length ? assigned.map(id => `<button class="btn btn-outline btn-sm mt-1" onclick="onManageCourseLecturer('${esc(c.courseid)}','remove','${esc(id)}')">Remove ${esc(id)}</button>`).join('') : ''}</div>`
                   : (isMine ? '<span class="badge b-green">My Course</span>' : `<button class="btn btn-outline btn-sm" onclick="onClaimCourse('${esc(c.courseid)}')">Assign to Me</button>`);
-                return `<tr><td><strong>${esc(c.coursecode)}</strong></td><td>${esc(c.coursetitle)}</td><td>${esc(c.level)}</td><td>${esc(c.creditunits)}</td><td>${assignedText}</td><td>${rosterButton} ${action}</td></tr>`;
+                const deleteButton = user.role === 'Administrator' ? ` <button class="btn btn-danger btn-sm" onclick="onDeleteCourse('${esc(c.courseid)}','${esc(c.coursecode)}')">Archive Course</button>` : '';
+                return `<tr><td><strong>${esc(c.coursecode)}</strong></td><td>${esc(c.coursetitle)}</td><td>${esc(c.level)}</td><td>${esc(c.creditunits)}</td><td>${assignedText}</td><td>${rosterButton} ${action} ${deleteButton}</td></tr>`;
               }).join('')
             }</tbody></table>`;
           }
         }
 
         if (currentView === 'vMaterials') {
+          if (user.role === 'Lecturer' || user.role === 'Administrator') { document.getElementById('courseFolderManager').classList.remove('hidden'); document.getElementById('staffMatBox').classList.remove('hidden'); }
           const mRes = await api('getMaterials', token);
           const list = mRes.materials || [];
           document.getElementById('materialsBox').innerHTML = list.length
@@ -1409,6 +1425,45 @@
     }
 
     /* ================= ACTIONS ================= */
+
+    async function loadResourceFolders(){
+      const cid=document.getElementById('mCourse').value,sel=document.getElementById('mFolder');
+      if(!cid){sel.innerHTML='<option value="">Course Resources (root)</option>';return;}
+      try{const r=await api('getCourseFolders',token,cid),fs=(r.folders||[]).filter(f=>f.folderType==='RESOURCE');
+        sel.innerHTML='<option value="">Course Resources (root)</option>'+fs.map(f=>'<option value="'+esc(f.folderID)+'">'+esc(f.folderName)+'</option>').join('');
+      }catch(err){sel.innerHTML='<option value="">Course Resources (root)</option>';alertMsg('appAlert',err.message,'error');}
+    }
+    async function loadCourseFolderManager(){
+      const cid=document.getElementById('folderCourse').value,type=document.getElementById('folderType').value,list=document.getElementById('courseFolderList'),parent=document.getElementById('folderParent');
+      if(!cid){list.innerHTML='<p class="text-muted">Select a course to manage its folders.</p>';parent.innerHTML='';return;}
+      try{const r=await api('getCourseFolders',token,cid),all=r.folders||[],fs=all.filter(f=>f.folderType===type);
+        const rootName=type==='RESOURCE'?'Course Resources':'Test Banks',root=fs.find(f=>f.folderName===rootName);
+        parent.innerHTML=(root?'<option value="'+esc(root.folderID)+'">'+esc(root.folderName)+' (root)</option>':'')+fs.filter(f=>f.folderName!==rootName).map(f=>'<option value="'+esc(f.folderID)+'">'+esc(f.folderName)+'</option>').join('');
+        list.innerHTML=fs.length?'<ul>'+fs.map(f=>'<li><strong>'+esc(f.folderName)+'</strong> <span class="text-muted">— '+(f.parentFolderID=== (root&&root.folderID)?'root level':'subfolder')+'</span></li>').join('')+'</ul>':'<p class="text-muted">No folders yet.</p>';
+      }catch(err){list.innerHTML='<p class="text-danger">'+esc(err.message)+'</p>';}
+    }
+    async function onCreateCourseFolder(){
+      const courseID=document.getElementById('folderCourse').value,folderName=document.getElementById('newCourseFolderName').value.trim();
+      if(!courseID||!folderName){alertMsg('appAlert','Select a course and enter a folder name.','error');return;}
+      loading(true,'Creating course folder...');
+      try{const r=await api('createCourseFolder',token,{courseID:courseID,folderName:folderName,folderType:document.getElementById('folderType').value,parentFolderID:document.getElementById('folderParent').value});
+        alertMsg('appAlert',r.message,r.success?'success':'error');if(r.success){document.getElementById('newCourseFolderName').value='';await loadCourseFolderManager();await loadResourceFolders();if(document.getElementById('bankCourse').value===courseID)await loadBankQuestions();}
+      }catch(err){alertMsg('appAlert',err.message,'error');}finally{loading(false);}
+    }
+    async function onDeleteCourse(courseID,courseCode){
+      if(!confirm('Archive '+courseCode+'? It will disappear from active course lists. Historical results, attendance, test attempts and student records will be retained.'))return;
+      loading(true,'Archiving course...');
+      try{const r=await api('deleteCourse',token,courseID);alertMsg('appAlert',r.message,r.success?'success':'error');if(r.success)await refreshView();}
+      catch(err){alertMsg('appAlert',err.message,'error');}finally{loading(false);}
+    }
+    async function onRemoveCourseEnrollee(matricNo){
+      const courseID=document.getElementById('rosterCourse').value;
+      if(!courseID||!confirm('Remove '+matricNo+' from this course only? Their student account and existing academic records will be retained.'))return;
+      loading(true,'Removing course enrolment...');
+      try{const r=await api('removeCourseEnrollee',token,courseID,matricNo);alertMsg('appAlert',r.message,r.success?'success':'error');if(r.success)await loadCourseRoster();}
+      catch(err){alertMsg('appAlert',err.message,'error');}finally{loading(false);}
+    }
+
     async function onCreateCourse(e) {
       e.preventDefault();
       loading(true, 'Creating course...');
@@ -1462,6 +1517,7 @@
       try {
         const payload = {
           courseID: document.getElementById('mCourse').value,
+          folderID: document.getElementById('mFolder').value,
           materialType: document.getElementById('mType').value,
           title: document.getElementById('mTitle').value,
           externalLink: document.getElementById('mLink').value
@@ -1632,8 +1688,9 @@
         activeCourseRoster=result.students||[];
         summary.textContent=(result.course.courseCode+' — '+result.course.courseTitle)+': '+activeCourseRoster.length+' enrolled student(s).';
         if(!activeCourseRoster.length){table.innerHTML='<p class="text-muted">There are no enrollees in this course yet.</p>';return;}
-        table.innerHTML='<table><thead><tr><th>S/N</th><th>Matriculation No.</th><th>Student Name</th><th>Gender</th><th>Programme</th><th>Level</th><th>Email</th><th>Phone</th><th>Date Enrolled</th></tr></thead><tbody>'+
-          activeCourseRoster.map((s,i)=>'<tr><td>'+(i+1)+'</td><td>'+esc(s.matricNo)+'</td><td>'+esc(s.studentName)+'</td><td>'+esc(s.gender)+'</td><td>'+esc(s.programme)+'</td><td>'+esc(s.level)+'</td><td>'+esc(s.email)+'</td><td>'+esc(s.phone)+'</td><td>'+esc(s.enrolledAt?fmtDate(s.enrolledAt):'')+'</td></tr>').join('')+'</tbody></table>';
+        const adminRemoveHead = user.role === 'Administrator' ? '<th>Admin Action</th>' : '';
+        table.innerHTML='<table><thead><tr><th>S/N</th><th>Matriculation No.</th><th>Student Name</th><th>Gender</th><th>Programme</th><th>Level</th><th>Email</th><th>Phone</th><th>Date Enrolled</th>'+adminRemoveHead+'</tr></thead><tbody>'+
+          activeCourseRoster.map((s,i)=>'<tr><td>'+(i+1)+'</td><td>'+esc(s.matricNo)+'</td><td>'+esc(s.studentName)+'</td><td>'+esc(s.gender)+'</td><td>'+esc(s.programme)+'</td><td>'+esc(s.level)+'</td><td>'+esc(s.email)+'</td><td>'+esc(s.phone)+'</td><td>'+esc(s.enrolledAt?fmtDate(s.enrolledAt):'')+'</td>'+(user.role === 'Administrator' ? '<td><button class="btn btn-danger btn-sm" onclick="onRemoveCourseEnrollee(\''+esc(s.matricNo)+'\')">Remove</button></td>' : '')+'</tr>').join('')+'</tbody></table>';
         document.getElementById('rosterSelectAll').checked=false;
         renderRosterEmailChoices();
         panel.classList.remove('hidden');
@@ -1887,15 +1944,17 @@
       const courseID = document.getElementById('bankCourse').value, select = document.getElementById('bankQuestionSelect'), box = document.getElementById('bankQuestionsBox');
       if (!courseID) { select.innerHTML = '<option value="">-- Select Course First --</option>'; box.innerHTML = ''; return; }
       try {
+        const folderRes = await api('getCourseFolders', token, courseID), bankFolders = (folderRes.folders || []).filter(f => f.folderType === 'TEST_BANK');
+        document.getElementById('bankFolder').innerHTML = '<option value="">General Test Bank</option>' + bankFolders.map(f => '<option value="'+esc(f.folderID)+'">'+esc(f.folderName)+'</option>').join('');
         const res = await api('listBankQuestions', token, courseID), qs = res.questions || [];
         bankQuestionCache = qs;
         select.innerHTML = '<option value="">-- Select Saved Question --</option>' + qs.map(q => '<option value="'+esc(q.bankquestionid)+'">'+esc(q.topic || q.questiontext).slice(0,90)+' ['+esc(q.difficulty)+']</option>').join('');
-        box.innerHTML = qs.length ? '<table><thead><tr><th>Topic</th><th>Question</th><th>Type</th><th>Access</th><th>Owner</th></tr></thead><tbody>' + qs.map(q=>'<tr><td>'+esc(q.topic||'-')+'</td><td>'+esc(q.questiontext)+'</td><td>'+esc(q.questiontype)+'</td><td>'+esc(q.sharing)+'</td><td>'+esc(q.ownerid)+'</td></tr>').join('') + '</tbody></table>' : '<p class="text-muted">No saved questions for this course yet.</p>';
+        box.innerHTML = qs.length ? '<table><thead><tr><th>Folder</th><th>Topic</th><th>Question</th><th>Type</th><th>Access</th><th>Owner</th></tr></thead><tbody>' + qs.map(q=>'<tr><td>'+esc((bankFolders.find(f=>String(f.folderID)===String(q.folderid))||{}).folderName||'General Test Bank')+'</td><td>'+esc(q.topic||'-')+'</td><td>'+esc(q.questiontext)+'</td><td>'+esc(q.questiontype)+'</td><td>'+esc(q.sharing)+'</td><td>'+esc(q.ownerid)+'</td></tr>').join('') + '</tbody></table>' : '<p class="text-muted">No saved questions for this course yet.</p>';
       } catch(err) { box.innerHTML = '<p class="text-muted">'+esc(err.message)+'</p>'; }
     }
     async function onSaveBankQuestion(e) {
       e.preventDefault();
-      const payload={courseID:document.getElementById('bankCourse').value,questionType:document.getElementById('bankType').value,
+      const payload={courseID:document.getElementById('bankCourse').value,folderID:document.getElementById('bankFolder').value,questionType:document.getElementById('bankType').value,
         topic:document.getElementById('bankTopic').value,difficulty:document.getElementById('bankDifficulty').value,
         sharing:document.getElementById('bankSharing').value,questionText:document.getElementById('bankText').value,
         optionA:document.getElementById('bankA').value,optionB:document.getElementById('bankB').value,optionC:document.getElementById('bankC').value,optionD:document.getElementById('bankD').value,
