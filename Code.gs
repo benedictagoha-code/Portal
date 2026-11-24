@@ -467,7 +467,7 @@ function registerLecturer(details, password) {
    ============================================================ */
 function getCourses(token) {
   const user = requireUser_(token);
-  const all = getRows_(SHEETS.COURSES);
+  const all = getRows_(SHEETS.COURSES).filter(c => String(c.status || 'ACTIVE').toUpperCase() !== 'ARCHIVED');
 
   if (user.role === 'Lecturer') {
     const uid = String(user.userID).toUpperCase();
@@ -667,7 +667,13 @@ function uploadMaterial(token, payload) {
     }
     const folderId = PropertiesService.getScriptProperties().getProperty(PROP_DRIVE_ID);
     if (!folderId) throw new Error('Courseware storage is not configured. Contact the system administrator.');
-    const folder = DriveApp.getFolderById(folderId);
+    let folder = DriveApp.getFolderById(folderId);
+    if(payload.folderID){
+      const folderRows=ensureDefaultCourseFolders_(crs,user);
+      const chosen=folderRows.find(x=>String(x.folderid)===String(payload.folderID)&&String(x.foldertype)==='RESOURCE');
+      if(!chosen)throw new Error('Choose a valid resource folder belonging to this course.');
+      folder=DriveApp.getFolderById(chosen.folderid);
+    }
     const mimeTypes = {
       pdf:'application/pdf',
       doc:'application/msword',
@@ -961,9 +967,13 @@ function saveBankQuestion(token,payload){
  if(type==='FILL_GAP'&&!data.acceptedAnswers.length)return{success:false,message:'Enter at least one accepted answer.'};
  if(type==='MATCHING'&&data.matchingPairs.length<2)return{success:false,message:'Enter at least two matching pairs.'};
  if((type==='MULTI_CORRECT'||type==='MULTI_INCORRECT')&&!data.correctKeys.length)return{success:false,message:'Select at least one correct key.'};
+ const folderID=String(payload.folderID||'');
+ if(folderID){const folders=ensureDefaultCourseFolders_(course,user);if(!folders.some(x=>String(x.folderid)===folderID&&String(x.foldertype)==='TEST_BANK'))return{success:false,message:'Choose a valid Test Bank folder for this course.'};}
  const id=makeId_('BANK'),now=new Date().toISOString(),sh=getDB_().getSheetByName(SHEETS.TEST_BANK);
  sh.appendRow([id,course.courseid,user.userID,String(payload.sharing||'PRIVATE').toUpperCase()==='SHARED'?'SHARED':'PRIVATE',String(payload.topic||'').trim(),String(payload.difficulty||'MEDIUM').toUpperCase(),type,String(payload.questionText).trim(),payload.optionA||'',payload.optionB||'',payload.optionC||'',payload.optionD||'',String(payload.correctAnswer||'').trim(),Math.max(0,Number(payload.marks||1)),String(payload.explanation||'').trim(),'ACTIVE',now,now]);
- setCellByHeader_(SHEETS.TEST_BANK,sh.getLastRow(),'AnswerDataJSON',JSON.stringify(data));return{success:true,questionID:id,message:'Question saved to the Test Bank.'};
+ setCellByHeader_(SHEETS.TEST_BANK,sh.getLastRow(),'AnswerDataJSON',JSON.stringify(data));
+ ensureCourseFolderSchema_();setCellByHeader_(SHEETS.TEST_BANK,sh.getLastRow(),'FolderID',folderID);
+ return{success:true,questionID:id,message:'Question saved to the Test Bank.'};
 }
 function listBankQuestions(token, courseID) {
   const user = requireUser_(token,['Lecturer','Administrator']);
@@ -1003,6 +1013,7 @@ function updateBankQuestion(token, questionID, payload) {
   if(type==='MATCHING'&&data.matchingPairs.length<2)return{success:false,message:'Enter at least two matching pairs.'};
   if((type==='MULTI_CORRECT'||type==='MULTI_INCORRECT')&&!data.correctKeys.length)return{success:false,message:'Select at least one correct key.'};
   const fields={Topic:payload.topic,Difficulty:payload.difficulty,Sharing:payload.sharing,QuestionType:type,QuestionText:payload.questionText,OptionA:payload.optionA,OptionB:payload.optionB,OptionC:payload.optionC,OptionD:payload.optionD,CorrectAnswer:payload.correctAnswer,AnswerDataJSON:JSON.stringify(data),Marks:payload.marks,Explanation:payload.explanation,UpdatedAt:new Date().toISOString()};
+  if(payload.folderID!==undefined){const folders=ensureDefaultCourseFolders_(getRows_(SHEETS.COURSES).find(c=>String(c.courseid)===String(q.courseid)),user);const fid=String(payload.folderID||'');if(fid&&!folders.some(x=>String(x.folderid)===fid&&String(x.foldertype)==='TEST_BANK'))return{success:false,message:'Choose a valid Test Bank folder for this course.'};fields.FolderID=fid;}
   Object.keys(fields).forEach(h=>{if(fields[h]!==undefined)setCellByHeader_(SHEETS.TEST_BANK,q._row,h,fields[h]);});
   return {success:true,message:'Test Bank question updated.'};
 }
@@ -1687,6 +1698,75 @@ function sendPortalEmail(token, payload) {
 /* ============================================================
    10. WEB APP ENTRY POINTS (BOTH DIRECT & GITHUB PAGES)
    ============================================================ */
+
+/* ============================================================
+   11. COURSE FOLDERS, TEST-BANK FOLDERS & SAFE ADMIN CONTROLS
+   ============================================================ */
+function ensureCourseFolderSchema_() {
+  const ss=getDB_();
+  let sh=ss.getSheetByName('CourseFolders');
+  if(!sh){sh=ss.insertSheet('CourseFolders');sh.appendRow(['CourseID','FolderID','FolderName','FolderType','ParentFolderID','CreatedBy','CreatedAt']);sh.getRange(1,1,1,7).setFontWeight('bold').setBackground('#123b5d').setFontColor('#ffffff');}
+  const bank=ss.getSheetByName(SHEETS.TEST_BANK);
+  if(bank){const heads=bank.getRange(1,1,1,bank.getLastColumn()).getValues()[0].map(v=>String(v).trim().toLowerCase());if(heads.indexOf('folderid')<0)bank.getRange(1,bank.getLastColumn()+1).setValue('FolderID');}
+  const courses=ss.getSheetByName(SHEETS.COURSES);
+  if(courses){const heads=courses.getRange(1,1,1,courses.getLastColumn()).getValues()[0].map(v=>String(v).trim().toLowerCase());if(heads.indexOf('status')<0)courses.getRange(1,courses.getLastColumn()+1).setValue('Status');}
+  return sh;
+}
+function courseFolderRoot_(course) {
+  const rootId=PropertiesService.getScriptProperties().getProperty(PROP_DRIVE_ID);
+  if(!rootId)throw new Error('Courseware storage is not configured. Contact the Administrator.');
+  const root=DriveApp.getFolderById(rootId), name=String(course.coursecode||course.courseid)+' — '+String(course.coursetitle||'Course');
+  const it=root.getFoldersByName(name);return it.hasNext()?it.next():root.createFolder(name);
+}
+function ensureDefaultCourseFolders_(course,user) {
+  const sh=ensureCourseFolderSchema_(), rows=getRows_('CourseFolders').filter(x=>String(x.courseid)===String(course.courseid));
+  const root=courseFolderRoot_(course);
+  [['Course Resources','RESOURCE'],['Test Banks','TEST_BANK']].forEach(def=>{
+    if(!rows.some(x=>String(x.foldertype)===def[1]&&String(x.foldername)===def[0])){
+      const it=root.getFoldersByName(def[0]), folder=it.hasNext()?it.next():root.createFolder(def[0]);
+      sh.appendRow([course.courseid,folder.getId(),def[0],def[1],root.getId(),user.userID,new Date().toISOString()]);
+    }
+  });
+  return getRows_('CourseFolders').filter(x=>String(x.courseid)===String(course.courseid));
+}
+function getCourseFolders(token,courseID) {
+  const user=requireUser_(token,['Lecturer','Administrator']),course=requireCourseAccess_(user,courseID);
+  const rows=ensureDefaultCourseFolders_(course,user);
+  return {success:true,folders:rows.map(x=>({folderID:x.folderid,folderName:x.foldername,folderType:x.foldertype,parentFolderID:x.parentfolderid}))};
+}
+function createCourseFolder(token,payload) {
+  const user=requireUser_(token,['Lecturer','Administrator']);payload=payload||{};
+  const course=requireCourseAccess_(user,payload.courseID),name=String(payload.folderName||'').trim(),type=String(payload.folderType||'RESOURCE').toUpperCase();
+  if(!name||name.length>80)return{success:false,message:'Enter a folder name of no more than 80 characters.'};
+  if(!['RESOURCE','TEST_BANK'].includes(type))return{success:false,message:'Choose Course Resources or Test Banks.'};
+  const rows=ensureDefaultCourseFolders_(course,user),base=rows.find(x=>String(x.foldertype)===type&&String(x.foldername)===(type==='RESOURCE'?'Course Resources':'Test Banks'));
+  if(!base)throw new Error('The course folder could not be prepared.');
+  const parentID=String(payload.parentFolderID||base.folderid);
+  const parent=rows.find(x=>String(x.folderid)===parentID&&String(x.foldertype)===type);
+  if(!parent)throw new Error('Choose a valid parent folder within this course and folder category.');
+  if(rows.some(x=>String(x.parentfolderid)===parentID&&String(x.foldername).toLowerCase()===name.toLowerCase()))return{success:false,message:'A folder with this name already exists here.'};
+  const driveParent=DriveApp.getFolderById(parentID),folder=driveParent.createFolder(name);
+  ensureCourseFolderSchema_().appendRow([course.courseid,folder.getId(),name,type,parentID,user.userID,new Date().toISOString()]);
+  return{success:true,message:name+' folder created.',folderID:folder.getId()};
+}
+function deleteCourse(token,courseID) {
+  requireUser_(token,['Administrator']);
+  const course=getRows_(SHEETS.COURSES).find(x=>String(x.courseid)===String(courseID));
+  if(!course)return{success:false,message:'Course not found.'};
+  if(String(course.status||'ACTIVE').toUpperCase()==='ARCHIVED')return{success:true,message:'Course is already archived.'};
+  setCellByHeader_(SHEETS.COURSES,course._row,'Status','ARCHIVED');
+  return{success:true,message:course.coursecode+' has been archived from active course lists. Historical academic records have been retained.'};
+}
+function removeCourseEnrollee(token,courseID,matricNo) {
+  requireUser_(token,['Administrator']);
+  const course=getRows_(SHEETS.COURSES).find(x=>String(x.courseid)===String(courseID));
+  if(!course)return{success:false,message:'Course not found.'};
+  const matric=normaliseMatric_(matricNo),row=getRows_(SHEETS.ENROLMENTS).find(x=>String(x.courseid)===String(courseID)&&normaliseMatric_(x.matricno)===matric);
+  if(!row)return{success:false,message:'This student is not enrolled in the selected course.'};
+  getDB_().getSheetByName(SHEETS.ENROLMENTS).deleteRow(row._row);
+  return{success:true,message:matric+' has been removed from '+course.coursecode+'. The student account and existing academic records have been retained.'};
+}
+
 function doGet(e) {
   if (e && e.parameter && e.parameter.bridge === '1') {
     return HtmlService
@@ -1716,6 +1796,10 @@ function doPost(e) {
       registerLecturer: registerLecturer,
       getCourses: getCourses,
       createCourse: createCourse,
+      getCourseFolders: getCourseFolders,
+      createCourseFolder: createCourseFolder,
+      deleteCourse: deleteCourse,
+      removeCourseEnrollee: removeCourseEnrollee,
       claimCourseAsLecturer: claimCourseAsLecturer,
       manageCourseLecturer: manageCourseLecturer,
       enrolStudentInCourse: enrolStudentInCourse,
