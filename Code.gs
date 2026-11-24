@@ -554,7 +554,7 @@ function enrolStudentInCourse(token, courseID) {
   try {
     const matric = normaliseMatric_(user.userID);
     const course = getRows_(SHEETS.COURSES).find(c => String(c.courseid) === String(courseID));
-    if (!course) return { success: false, message: 'Course not found. Please select a valid course.' };
+    if (!course || String(course.status || 'ACTIVE').toUpperCase() === 'ARCHIVED') return { success: false, message: 'Course not found or no longer open for enrolment.' };
     if (isStudentEnrolled_(matric, courseID)) return { success: false, message: 'You are already enrolled in this course.' };
     const stu = getRows_(SHEETS.STUDENTS).find(s => normaliseMatric_(s.matricno) === matric);
     if (!stu) return { success: false, message: 'Student profile not found. Please contact the administrator.' };
@@ -665,15 +665,11 @@ function uploadMaterial(token, payload) {
     if (['pdf','doc','docx','ppt','pptx','mp4','webm','mov','mp3','wav','m4a','ogg'].indexOf(extension) < 0) {
       throw new Error('Unsupported file type. Upload PDF, Office, video or audio files only.');
     }
-    const folderId = PropertiesService.getScriptProperties().getProperty(PROP_DRIVE_ID);
-    if (!folderId) throw new Error('Courseware storage is not configured. Contact the system administrator.');
-    let folder = DriveApp.getFolderById(folderId);
-    if(payload.folderID){
-      const folderRows=ensureDefaultCourseFolders_(crs,user);
-      const chosen=folderRows.find(x=>String(x.folderid)===String(payload.folderID)&&String(x.foldertype)==='RESOURCE');
-      if(!chosen)throw new Error('Choose a valid resource folder belonging to this course.');
-      folder=DriveApp.getFolderById(chosen.folderid);
-    }
+    const folderRows=ensureDefaultCourseFolders_(crs,user);
+    const resourceRoot=folderRows.find(x=>String(x.foldertype)==='RESOURCE'&&String(x.foldername)==='Course Resources');
+    const chosen=payload.folderID ? folderRows.find(x=>String(x.folderid)===String(payload.folderID)&&String(x.foldertype)==='RESOURCE') : resourceRoot;
+    if(!chosen)throw new Error('Choose a valid resource folder belonging to this course.');
+    const folder=DriveApp.getFolderById(chosen.folderid);
     const mimeTypes = {
       pdf:'application/pdf',
       doc:'application/msword',
@@ -1751,6 +1747,7 @@ function createCourseFolder(token,payload) {
 }
 function deleteCourse(token,courseID) {
   requireUser_(token,['Administrator']);
+  ensureCourseFolderSchema_();
   const course=getRows_(SHEETS.COURSES).find(x=>String(x.courseid)===String(courseID));
   if(!course)return{success:false,message:'Course not found.'};
   if(String(course.status||'ACTIVE').toUpperCase()==='ARCHIVED')return{success:true,message:'Course is already archived.'};
