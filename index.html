@@ -1430,7 +1430,8 @@
       const cid=document.getElementById('mCourse').value,sel=document.getElementById('mFolder');
       if(!cid){sel.innerHTML='<option value="">Course Resources (root)</option>';return;}
       try{const r=await api('getCourseFolders',token,cid),fs=(r.folders||[]).filter(f=>f.folderType==='RESOURCE');
-        sel.innerHTML='<option value="">Course Resources (root)</option>'+fs.map(f=>'<option value="'+esc(f.folderID)+'">'+esc(f.folderName)+'</option>').join('');
+        const root=fs.find(f=>f.folderName==='Course Resources');
+        sel.innerHTML=(root?'<option value="'+esc(root.folderID)+'">Course Resources (root)</option>':'<option value="">Course Resources (root)</option>')+fs.filter(f=>f.folderName!=='Course Resources').map(f=>'<option value="'+esc(f.folderID)+'">'+esc(f.folderName)+'</option>').join('');
       }catch(err){sel.innerHTML='<option value="">Course Resources (root)</option>';alertMsg('appAlert',err.message,'error');}
     }
     async function loadCourseFolderManager(){
@@ -1945,7 +1946,8 @@
       if (!courseID) { select.innerHTML = '<option value="">-- Select Course First --</option>'; box.innerHTML = ''; return; }
       try {
         const folderRes = await api('getCourseFolders', token, courseID), bankFolders = (folderRes.folders || []).filter(f => f.folderType === 'TEST_BANK');
-        document.getElementById('bankFolder').innerHTML = '<option value="">General Test Bank</option>' + bankFolders.map(f => '<option value="'+esc(f.folderID)+'">'+esc(f.folderName)+'</option>').join('');
+        const bankRoot=bankFolders.find(f=>f.folderName==='Test Banks');
+        document.getElementById('bankFolder').innerHTML = (bankRoot?'<option value="'+esc(bankRoot.folderID)+'">Test Banks (root)</option>':'<option value="">Test Banks (root)</option>') + bankFolders.filter(f=>f.folderName!=='Test Banks').map(f => '<option value="'+esc(f.folderID)+'">'+esc(f.folderName)+'</option>').join('');
         const res = await api('listBankQuestions', token, courseID), qs = res.questions || [];
         bankQuestionCache = qs;
         select.innerHTML = '<option value="">-- Select Saved Question --</option>' + qs.map(q => '<option value="'+esc(q.bankquestionid)+'">'+esc(q.topic || q.questiontext).slice(0,90)+' ['+esc(q.difficulty)+']</option>').join('');
@@ -1971,6 +1973,7 @@
       if(!q){alertMsg('appAlert','Select a saved question first.','error');return;}
       if(user.role!=='Administrator'&&String(q.ownerid).toUpperCase()!==String(user.userID).toUpperCase()){alertMsg('appAlert','Only the question owner can edit it.','error');return;}
       bankEditingId=id;
+      document.getElementById('bankFolder').value=q.folderid||'';
       document.getElementById('bankType').value=q.questiontype||'MCQ';
       const ad=(()=>{try{return JSON.parse(q.answerdatajson||'{}')}catch(e){return {}}})();
       document.getElementById('bankTopic').value=q.topic||'';
